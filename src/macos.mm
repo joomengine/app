@@ -36,27 +36,6 @@ NSURL *workspaceURL() {
     return [NSURL URLWithString:nativeString(joomengine::url)];
 }
 
-#ifdef JOOMENGINE_NATIVE_QA
-// Named persistent stores isolate the test profile from the everyday workspace.
-WKWebsiteDataStore *testStore() {
-    if (@available(macOS 14.0, *)) {
-        NSString *profile = nativeString(qa::profilePath());
-        NSFileManager *files = NSFileManager.defaultManager;
-        if (![files createDirectoryAtPath:profile withIntermediateDirectories:YES attributes:nil error:nullptr])
-            return nil;
-        NSString *path = [profile stringByAppendingPathComponent:@"webkit-identifier"];
-        NSUUID *identifier = [[NSUUID alloc] initWithUUIDString:
-            ([NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nullptr] ?: @"")];
-        if (!identifier) {
-            identifier = NSUUID.UUID;
-            if (![identifier.UUIDString writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nullptr])
-                return nil;
-        }
-        return [WKWebsiteDataStore dataStoreForIdentifier:identifier];
-    }
-    return nil;
-}
-#endif
 } // namespace
 
 @interface DownloadTarget : NSObject
@@ -73,6 +52,7 @@ WKWebsiteDataStore *testStore() {
 @property(nonatomic, weak) WKWebView *owner;
 @property(nonatomic, strong) NSMapTable<WKDownload *, DownloadTarget *> *downloads;
 @property(nonatomic, strong) NSMenuItem *reloadItem;
+@property(nonatomic, strong) WKNavigation *closingNavigation;
 @end
 
 @implementation JoomEngineHost
@@ -133,9 +113,15 @@ WKWebsiteDataStore *testStore() {
     config.limitsNavigationsToAppBoundDomains = YES;
     config.preferences.javaScriptCanOpenWindowsAutomatically = YES;
 #ifdef JOOMENGINE_NATIVE_QA
-    WKWebsiteDataStore *store = testStore();
-    if (!store) { NSLog(@"Could not open the isolated test profile"); choc::messageloop::stop(); return; }
-    config.websiteDataStore = store;
+    // CMake gives each QA build its own bundle identity. The default store
+    // therefore follows the same lifecycle as a user's production store.
+    NSString *prefix = @"org.joomengine.app.qa.";
+    NSString *bundleID = NSBundle.mainBundle.bundleIdentifier;
+    if (![bundleID hasPrefix:prefix] || bundleID.length == prefix.length) {
+        NSLog(@"Refusing to test outside the uniquely identified QA bundle");
+        choc::messageloop::stop();
+        return;
+    }
     WKUserScript *qaScript = [[WKUserScript alloc] initWithSource:nativeString(qa::script())
         injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
     [config.userContentController addUserScript:qaScript];
@@ -157,7 +143,8 @@ WKWebsiteDataStore *testStore() {
         [self.owner.window makeKeyAndOrderFront:nil];
         [self.reloadItem.menu performActionForItemAtIndex:[self.reloadItem.menu indexOfItem:self.reloadItem]];
     }, [] {
-        choc::messageloop::stop();
+        if (qa::exitCode() == 0) [NSApp terminate:nil];
+        else choc::messageloop::stop();
     });
 }
 #endif
@@ -175,6 +162,45 @@ WKWebsiteDataStore *testStore() {
     if (!self.owner) [self openWorkspace];
     [self.owner.window makeKeyAndOrderFront:nil];
     return YES;
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)window {
+    if (window.contentView != self.owner) return YES;
+    [NSApp terminate:window];
+    return NO;
+}
+
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+    if (!self.owner || isBlank(self.owner.URL)) return NSTerminateNow;
+    if (!self.closingNavigation) {
+        // A normal navigation delivers pagehide and tears down the site's
+        // worker clients before AppKit exits. Returning directly from the
+        // run loop can otherwise terminate the owner during a checkpoint.
+        self.closingNavigation = [self.owner loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"about:blank"]]];
+    }
+    return self.closingNavigation ? NSTerminateLater : NSTerminateNow;
+}
+
+- (void)webView:(WKWebView *)view didFinishNavigation:(WKNavigation *)navigation {
+    if (self.closingNavigation && navigation == self.closingNavigation) {
+        self.closingNavigation = nil;
+        [NSApp replyToApplicationShouldTerminate:YES];
+    }
+}
+
+- (void)webViewWebContentProcessDidTerminate:(WKWebView *)view {
+    if (view != self.owner) return;
+    if (self.closingNavigation) {
+        self.closingNavigation = nil;
+        [NSApp replyToApplicationShouldTerminate:YES];
+    } else {
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = @"The Playground web process stopped";
+        alert.informativeText = @"Reload the workspace to reopen the saved site.";
+        [alert addButtonWithTitle:@"Reload"]; [alert addButtonWithTitle:@"Close"];
+        if ([alert runModal] == NSAlertFirstButtonReturn) [view loadRequest:[NSURLRequest requestWithURL:workspaceURL()]];
+        else [view.window close];
+    }
 }
 
 - (void)windowWillClose:(NSNotification *)note {
@@ -223,6 +249,14 @@ WKWebsiteDataStore *testStore() {
     if ([response isKindOfClass:NSHTTPURLResponse.class])
         disposition = [(NSHTTPURLResponse *)response valueForHTTPHeaderField:@"Content-Disposition"];
     BOOL attachment = [[disposition lowercaseString] hasPrefix:@"attachment"];
+#ifdef JOOMENGINE_NATIVE_QA
+    // Only paths are printed; deployment URLs can contain private query data.
+    if (navigation.isForMainFrame || [response.URL.path containsString:@"/__site/"]) {
+        NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+        NSLog(@"WebKit navigation: %@ HTTP %ld, MIME %@, display=%d, attachment=%d",
+              response.URL.path, (long)status, response.MIMEType, navigation.canShowMIMEType, attachment);
+    }
+#endif
     decide((attachment || !navigation.canShowMIMEType) ? WKNavigationResponsePolicyDownload : WKNavigationResponsePolicyAllow);
 }
 
@@ -316,6 +350,14 @@ WKWebsiteDataStore *testStore() {
 }
 
 - (void)webView:(WKWebView *)view didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error {
+#ifdef JOOMENGINE_NATIVE_QA
+    NSLog(@"WebKit provisional navigation failed: %@ %ld", error.domain, (long)error.code);
+#endif
+    if (self.closingNavigation && navigation == self.closingNavigation) {
+        self.closingNavigation = nil;
+        [NSApp replyToApplicationShouldTerminate:NO];
+        return;
+    }
     if (view != self.owner || ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorCancelled) ||
         ([error.domain isEqualToString:@"WebKitErrorDomain"] && error.code == 102)) return;
     [view loadHTMLString:@"<meta name='viewport' content='width=device-width'><main style='font:18px system-ui;padding:3em'>"
