@@ -13,12 +13,27 @@ async function fixtureRun(app, { marker, second, directory }) {
     if (document.body?.dataset.error) throw Error(document.body.dataset.error);
     return navigator.serviceWorker?.controller && document.body?.dataset.workers === '2';
   }));
-  const key = 'joomengine-desktop-smoke';
-  if (second) {
-    assert.equal(await app.renderer(key => localStorage.getItem(key), key), marker);
-    return;
-  }
-  await app.renderer((key, marker) => { localStorage.setItem(key, marker); }, key, marker);
+  const value = await app.renderer(async (marker, second) => {
+    const db = await new Promise((resolve, reject) => {
+      const open = indexedDB.open('desktop-project', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('workspace');
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    });
+    try {
+      const tx = db.transaction('workspace', second ? 'readonly' : 'readwrite');
+      const store = tx.objectStore('workspace');
+      if (!second) store.put(marker, 'saved');
+      const result = store.get('saved');
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onabort = () => reject(tx.error);
+      });
+      return result.result;
+    } finally { db.close(); }
+  }, marker, second);
+  assert.equal(value, marker, 'The same IndexedDB project must survive a full desktop restart');
+  if (second) return;
   await app.renderer(() => {
     window.addEventListener('message', event => {
       if (event.origin === location.origin && event.source === window.tool) document.body.dataset.message = event.data;
@@ -50,7 +65,11 @@ async function run() {
       const app = await launch(path.resolve(binary), profile, server?.args);
       try {
         await test(app, { ...options, second });
-      } finally { await app.close(); }
+      } catch (error) {
+        await app.close().catch(closeError => console.error(closeError.message));
+        throw error;
+      }
+      await app.close();
     }
     console.log(mode ? 'Live JCB dashboard, saved site, detached database window and complete site export passed.'
       : 'Desktop service worker, shared WASM memory, native popup, download and persistent restart passed.');

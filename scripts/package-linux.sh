@@ -15,6 +15,7 @@ chmod 0755 "$build/$name/app"
 # Chromium uses user namespaces. A user-extractable archive never needs to
 # grant a runtime helper setuid privileges.
 chmod a-s "$build/$name/app/chrome-sandbox"
+install -m 0644 packaging/linux/README.md "$build/$name/README.md"
 install -m 0755 packaging/linux/install.sh "$build/$name/install.sh"
 install -m 0644 packaging/linux/joomengine.{desktop,apparmor} assets/joomengine.png "$build/$name/"
 tar -C "$build" --owner=0 --group=0 --numeric-owner -czf "$build/$name.tar.gz" "$name"

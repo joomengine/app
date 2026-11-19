@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, Menu } = require('electron');
+const { app, Menu, shell } = require('electron');
 const { createPlaygroundWindow } = require('./window.cjs');
 
 app.setName('JoomEngine');
@@ -26,7 +26,15 @@ if (!app.requestSingleInstanceLock()) {
       { role: 'fileMenu' },
       { role: 'editMenu' },
       { role: 'viewMenu' },
-      { role: 'windowMenu' }
+      { role: 'windowMenu' },
+      {
+        role: 'help',
+        submenu: [
+          { label: 'Playground Guide', click: () => shell.openExternal('https://github.com/joomengine/playground#readme') },
+          { label: 'Desktop Support', click: () => shell.openExternal('https://github.com/joomengine/app/issues') },
+          ...(process.platform === 'darwin' ? [] : [{ type: 'separator' }, { role: 'about' }])
+        ]
+      }
     ]));
     showOwner();
   });
