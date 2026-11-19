@@ -44,7 +44,9 @@ try {
     Add-AppxPackage -Path $PackagePath
     $installed = Get-AppxPackage -Name $manifest.Package.Identity.Name -Publisher $manifest.Package.Identity.Publisher
     if (-not $installed) { throw 'The installed JoomEngine package could not be located.' }
-    $executable = Join-Path $installed.InstallLocation $manifest.Package.Applications.Application.Executable
+    # Windows activates a registered MSIX through its execution alias. Spawning
+    # the executable directly under Program Files/WindowsApps bypasses activation.
+    $executable = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/joomengine.exe'
     & node (Join-Path $PSScriptRoot '../../test/smoke.cjs') $executable
     if ($LASTEXITCODE) { throw "Packaged application smoke test failed ($LASTEXITCODE)." }
 } finally {
