@@ -57,7 +57,7 @@ if(JOOMENGINE_NATIVE_QA)
     target_include_directories(joomengine PRIVATE test)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT JOOMENGINE_NATIVE_QA)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     include(GNUInstallDirs)
     install(TARGETS joomengine RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
     # Use the application ID for desktop exports, including Flatpak's launcher.
