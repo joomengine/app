@@ -28,47 +28,30 @@ You can also launch **JoomEngine** from the app menu. To replace a previously in
 
 ## AppImage
 
-Keep the downloaded AppImage in a directory where you can run executables, then make it executable and start it as your own user.
+Run these commands from the folder containing the verified AppImage, then open **JoomEngine** from your applications menu.
 
 ```sh
 chmod +x ./JoomEngine-*-x86_64.AppImage
-./JoomEngine-*-x86_64.AppImage
+./JoomEngine-*-x86_64.AppImage --appimage-extract-and-run --install
 ```
 
-If the launcher reports a FUSE error, follow the [AppImage FUSE instructions for your distribution](https://docs.appimage.org/user-guide/troubleshooting/fuse.html). Where FUSE is unavailable, run the file with `--appimage-extract-and-run`. To update, quit the app and replace the file with a newly verified AppImage.
+The installer requests administrator access to copy the app to `/opt/joomengine/JoomEngine.AppImage` and add its icon and launcher. On Ubuntu systems that restrict unprivileged user namespaces, it also installs the app-specific AppArmor profile Chromium needs to run its sandbox. The application itself runs as your regular user. To update, quit the app and repeat the same commands with the new download.
 
-### Ubuntu AppArmor and the Chromium sandbox
-
-If the AppImage reports a sandbox or user-namespace startup error on Ubuntu with restricted unprivileged user namespaces, install the verified file in the fixed location covered by its bundled AppArmor profile. The following commands run the app as your regular user. Only the system-wide file and profile installation need administrator access.
-
-```sh
-sudo install -D -m 0755 ./JoomEngine-*-x86_64.AppImage /opt/joomengine/JoomEngine.AppImage
-profile_path=usr/share/doc/joomengine/AppImage/joomengine.apparmor
-work=$(mktemp -d)
-(
-    cd "$work" &&
-    /opt/joomengine/JoomEngine.AppImage --appimage-extract "$profile_path" &&
-    sudo install -m 0644 "squashfs-root/$profile_path" /etc/apparmor.d/joomengine-appimage &&
-    sudo apparmor_parser --replace /etc/apparmor.d/joomengine-appimage
-) && /opt/joomengine/JoomEngine.AppImage
-```
-
-This profile allows the app at that root-owned path to create its Chromium sandbox. To update, replace the file at the same path. If you want a per-user installation on this system, the Flatpak option is available above.
+For portable use on a system that permits Chromium user namespaces, make the file executable and double-click it, or run `./JoomEngine-*-x86_64.AppImage`. If FUSE is unavailable, run it with `--appimage-extract-and-run`. [AppImage FUSE troubleshooting](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)
 
 ## Snap
 
-Use this on a distribution with [snapd installed](https://snapcraft.io/docs/installing-snapd). Install the verified local Snap and connect its runtime and interfaces.
+With [snapd installed](https://snapcraft.io/docs/installing-snapd), download the single file **joomengine-install-snap.sh** from the [GitHub release](https://github.com/joomengine/joomengine/releases). It contains the complete JoomEngine Snap. Run it as your ordinary user from your download directory:
 
 ```sh
-sudo snap install kde-qt6-core24
-sudo snap install --dangerous ./joomengine_*_amd64.snap
-sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
-sudo snap connect joomengine:browser-support
-sudo snap connect joomengine:hardware-observe
-snap run joomengine
+bash ./joomengine-install-snap.sh
 ```
 
-The local file from GitHub has no Snap Store assertion, which is why the install command uses `--dangerous`. The app still runs under strict confinement. KDE supplies the shared Qt runtime, `browser-support` enables Chromium's own process sandbox, and `hardware-observe` allows Qt to identify graphics devices. When installing a newer file from GitHub, use `sudo snap install --dangerous ./joomengine_*_amd64.snap` from the new download directory. [Installing local snaps](https://forum.snapcraft.io/t/download-snaps-and-install-offline/15713)
+Enter your administrator password if prompted. The installer checks the embedded package's SHA-256, obtains the shared Qt and graphics runtimes from the Snap Store, and configures the required interfaces. Open **JoomEngine** from the applications menu or run `snap run joomengine`. To update a GitHub installation, quit JoomEngine and run the newer self-contained installer. Existing saved work stays in the same Snap profile.
+
+The helper ships with version 0.2.0 and newer and can upgrade an existing 0.1.0 installation. GitHub also provides the raw `.snap` for system administrators and `SHA256SUMS` for anyone who wants to [independently verify the downloaded installer](install-verify.md#linux).
+
+**Snap Store.** Once the approved stable listing is public, choose **Install** on the [JoomEngine Snap Store page](https://snapcraft.io/joomengine) or run `sudo snap install joomengine`. The Store installation configures the connections and updates automatically. [Store setup and availability](publishing-linux.md#snap-store)
 
 ### An installation succeeded and snapd reports a warning
 

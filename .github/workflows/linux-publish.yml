@@ -25,13 +25,29 @@ jobs:
           file=$(packaging/publish/release-file.sh '*.snap')
           echo "path=$file" >> "$GITHUB_OUTPUT"
           python3 packaging/publish/snap-status.py "$file" >> "$GITHUB_OUTPUT"
-      - uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1
+      - name: Install Store and desktop test tools
+        if: steps.asset.outputs.promote == 'true'
+        run: |
+          .github/scripts/install-linux-build-deps.sh dbus-user-session
+          sudo snap install --classic snapcraft
+      - name: Upload the tested release to latest/candidate
         if: steps.asset.outputs.upload == 'true'
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        with:
-          snap: ${{ steps.asset.outputs.path }}
-          release: stable
+          RELEASE_SNAP: ${{ steps.asset.outputs.path }}
+        run: snapcraft upload "$RELEASE_SNAP" --release=latest/candidate
+      - name: Install from the Store and launch with automatic connections
+        if: steps.asset.outputs.promote == 'true'
+        id: candidate
+        env:
+          RELEASE_SNAP: ${{ steps.asset.outputs.path }}
+        run: packaging/publish/check-snap-candidate.sh "$RELEASE_SNAP"
+      - name: Promote the verified Store revision to latest/stable
+        if: steps.asset.outputs.promote == 'true'
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          REVISION: ${{ steps.candidate.outputs.revision }}
+        run: snapcraft release joomengine "$REVISION" latest/stable
 
   debian:
     name: Signed Debian APT repository

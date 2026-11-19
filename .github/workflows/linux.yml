@@ -37,7 +37,7 @@ jobs:
           if-no-files-found: error
 
   snap:
-    name: Qt WebEngine Snap (amd64)
+    name: Build strict Qt WebEngine Snap (amd64)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -66,6 +66,40 @@ jobs:
           # the same filesystem, native runtime and confinement with QA enabled.
           sudo install -m 0755 build-qa/joomengine dist/snap-project/prime/usr/bin/joomengine
           sudo snap pack dist/snap-project/prime dist/qa-snap
+          packaging/linux/build-snap-installer.sh "dist/packages/$output" dist/packages/joomengine-install-snap.sh
+          packaging/linux/build-snap-installer.sh "dist/qa-snap/$output" dist/qa-snap/joomengine-install-snap.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap-install-test-inputs
+          path: |
+            dist/packages/*.snap
+            dist/packages/joomengine-install-snap.sh
+            dist/qa-snap/joomengine-install-snap.sh
+          if-no-files-found: error
+          retention-days: 7
+
+  snap-install:
+    name: Install the release Snap on a clean desktop (amd64)
+    needs: snap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: snap-install-test-inputs
+          path: dist
+      - name: Prepare the disposable user's graphical session
+        run: |
+          .github/scripts/install-linux-build-deps.sh dbus-user-session
+          for package in joomengine kde-qt6-core24; do
+            if snap list "$package" >/dev/null 2>&1; then
+              echo "The clean install test needs a runner without $package." >&2
+              exit 1
+            fi
+          done
+      - name: Reject damaged self-contained installers before any system change
+        run: bash test/snap-installer.sh dist/packages/joomengine-install-snap.sh
       - name: Install and launch the release in a real user session
         run: |
           sudo loginctl enable-linger "$(id -un)"
@@ -73,10 +107,7 @@ jobs:
           runtime="/run/user/$(id -u)"
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           systemctl --user start dbus.socket
-          sudo snap install --dangerous dist/packages/*.snap
-          sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
-          sudo snap connect joomengine:browser-support
-          sudo snap connect joomengine:hardware-observe
+          (cd dist/packages && bash ./joomengine-install-snap.sh)
           # A Snapped shell uses the same command chain, base and providers
           # as the installed binary. The build VM can have extra libraries.
           systemd-run --user --wait --pipe --collect --quiet xvfb-run -a snap run --shell joomengine -c '
@@ -98,11 +129,12 @@ jobs:
             xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
       - name: Exercise Playground in the confined native QA build
         run: |
-          sudo snap remove --purge joomengine
-          sudo snap install --dangerous dist/qa-snap/*.snap
-          sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
-          sudo snap connect joomengine:browser-support
-          sudo snap connect joomengine:hardware-observe
+          # Upgrade the existing local install in place and prove shared user data survives.
+          marker="$HOME/snap/joomengine/common/ci-upgrade-marker"
+          test -d "$(dirname "$marker")"
+          echo "$GITHUB_RUN_ID" > "$marker"
+          (cd dist/qa-snap && bash ./joomengine-install-snap.sh)
+          test "$(cat "$marker")" = "$GITHUB_RUN_ID"
           runtime="/run/user/$(id -u)"
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           tmp="$HOME/snap/joomengine/common"
@@ -121,4 +153,9 @@ jobs:
         with:
           name: linux-snap
           path: dist/packages/*.snap
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-snap-installer
+          path: dist/packages/joomengine-install-snap.sh
           if-no-files-found: error

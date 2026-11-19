@@ -25,12 +25,13 @@ constexpr wchar_t windowClass[] = L"JoomEngine.Workspace";
 constexpr UINT reloadCommand = 101;
 constexpr UINT closeCommand = 102;
 constexpr UINT toggleMenuCommand = 103;
+constexpr UINT selectAllCommand = 109;
 constexpr UINT systemToggleMenuCommand = 0x1FA0; // System-menu commands reserve their low four bits.
 struct EditCommand { UINT id; const wchar_t* label; const wchar_t* browserCommand; };
 constexpr EditCommand editCommands[] = {
     {104, L"&Undo\tCtrl+Z", L"Undo"}, {105, L"&Redo\tCtrl+Y", L"Redo"},
     {106, L"Cu&t\tCtrl+X", L"Cut"}, {107, L"&Copy\tCtrl+C", L"Copy"},
-    {108, L"&Paste\tCtrl+V", L"Paste"}, {109, L"Select &All\tCtrl+A", L"SelectAll"}
+    {108, L"&Paste\tCtrl+V", L"Paste"}, {selectAllCommand, L"Select &All\tCtrl+A", L"SelectAll"}
 };
 ComPtr<ICoreWebView2Environment> environment;
 
@@ -318,7 +319,8 @@ struct Window : std::enable_shared_from_this<Window> {
                 if (self->owner)
                     qa::onTitle(title.utf8(),
                         [self] { PostMessageW(self->hwnd, WM_COMMAND, reloadCommand, 0); },
-                        [self] { PostMessageW(self->hwnd, WM_CLOSE, 0, 0); });
+                        [self] { PostMessageW(self->hwnd, WM_CLOSE, 0, 0); },
+                        [self] { PostMessageW(self->hwnd, WM_COMMAND, selectAllCommand, 0); });
 #endif
                 return S_OK;
             }).Get(), &token);

@@ -5,7 +5,7 @@ Every successful main build and version-tag build publishes its downloads to Git
 | Channel | Registration and deployment | What the release job does |
 | --- | --- | --- |
 | GitHub Releases | [Release procedure](releases.md) | Publishes all verified packages and SHA-256 checksums using the built-in Actions token. |
-| Snap Store | [Register the snap, request interfaces and export a credential](publishing-linux.md#snap-store) | Uploads the tested Snap to the stable channel when enabled. |
+| Snap Store | [Register the snap, request interfaces and export a credential](publishing-linux.md#snap-store) | Checks a Store-installed candidate on a clean system and promotes the verified revision to stable when enabled. |
 | Debian APT and Fedora DNF | [Configure a signed Cloudsmith package repository](publishing-linux.md) | Uploads the same GitHub binaries into the configured APT and RPM repositories. Official distribution inclusion is a separate maintainer process. |
 | Arch User Repository | [Register an AUR maintainer and package](publishing-linux.md) | Publishes the checked source recipe and generated package metadata to AUR. The binary package remains available on GitHub. |
 | Flatpak and Flathub | [Distribute the bundle and request Flathub review](publishing-linux.md) | GitHub publishes the standalone bundle. Flathub has its own review, manifest requirements and build service. |

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def package_names(version):
     return {
         "linux-archive": f"JoomEngine-{version}-linux-x64.tar.gz",
+        "linux-snap-installer": "joomengine-install-snap.sh",
         "linux-snap": f"joomengine_{version}_amd64.snap",
         "linux-deb": f"joomengine_{version}-1_amd64.deb",
         "linux-arch": f"joomengine-{version}-1-x86_64.pkg.tar.zst",
@@ -31,6 +32,7 @@ def collect(artifacts, output, version):
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError(f"Output directory must be empty: {output}")
+    ready = []
     for artifact, name in package_names(version).items():
         directory = artifacts / artifact
         if not directory.is_dir() or sorted(p.name for p in directory.iterdir()) != [name]:
@@ -38,8 +40,10 @@ def collect(artifacts, output, version):
         source = directory / name
         if source.is_symlink() or not source.is_file() or not source.stat().st_size:
             raise ValueError(f"Empty or invalid release asset: {source}")
-        # Keep only one on-disk copy of the large bundles on the runner.
-        shutil.move(source, output / name)
+        ready.append(source)
+    # Validate the complete set before moving any large bundle.
+    for source in ready:
+        shutil.move(source, output / source.name)
 
 
 def main():

@@ -1,6 +1,23 @@
 #!/bin/sh
 set -eu
 appdir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+if [ "${1:-}" = "--install" ]; then
+  exec "$appdir/usr/libexec/install-appimage"
+fi
+restricted=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+if [ -n "${APPIMAGE:-}" ] && [ "$APPIMAGE" != /opt/joomengine/JoomEngine.AppImage ] &&
+   [ -r "$restricted" ] && [ "$(cat "$restricted")" = 1 ] &&
+   command -v unshare >/dev/null && ! unshare --user --map-root-user true 2>/dev/null; then
+  message='This system restricts Chromium user namespaces. In the download directory, run the command below to install JoomEngine and allow its browser sandbox. Then open JoomEngine from the applications menu.
+
+./JoomEngine-*-x86_64.AppImage --appimage-extract-and-run --install'
+  printf '%s\n' "$message" >&2
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    if command -v zenity >/dev/null; then zenity --info --no-markup --title=JoomEngine --text="$message"
+    elif command -v kdialog >/dev/null; then kdialog --title JoomEngine --msgbox "$message"; fi
+  fi
+  exit 1
+fi
 export LD_LIBRARY_PATH="$appdir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export QT_PLUGIN_PATH="$appdir/usr/plugins"
 export QTWEBENGINEPROCESS_PATH="$appdir/usr/libexec/QtWebEngineProcess"

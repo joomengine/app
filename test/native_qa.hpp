@@ -34,8 +34,8 @@ inline int exitCode() { return result; }
 
 // Called only for the owner window in the QA build. File output also works
 // for native GUI binaries without an attached console on Windows or macOS.
-template<class Reload, class Quit>
-void onTitle(std::string_view title, Reload reload, Quit quit) {
+template<class Reload, class Quit, class SelectAll>
+void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectAll) {
     const std::string prefix = "JE-QA/" + environment("JOOMENGINE_QA_ID") + "/";
     if (title.compare(0, prefix.size(), prefix) != 0) return;
     title.remove_prefix(prefix.size());
@@ -50,6 +50,7 @@ void onTitle(std::string_view title, Reload reload, Quit quit) {
     log << command << ' ' << detail << '\n';
     log.close();
 
+    if (command == "select-all") selectAll();
     if (command == "reload" || command == "retry-module") reload();
     if (command == "fail" || command == "pass") {
         result = command == "pass" ? 0 : 1;
