@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage the notices and matching open-source Qt release for the macOS DMGs."""
+"""Stage the notices and matching open-source Qt release for the packages that bundle Qt."""
 
 import argparse
 import hashlib
@@ -99,7 +99,7 @@ def write_notice_archive(source, output):
             archive.getinfo(required)
 
 
-def install(resources):
+def install(resources, appimage=False):
     target = resources / "LICENSES"
     target.mkdir(parents=True, exist_ok=True)
     for name in ("GPL-3.0.txt", "LGPL-3.0.txt", "CHOC-ISC.txt"):
@@ -116,24 +116,14 @@ def install(resources):
                 write_notice_archive(source, generated)
                 generated.replace(cached)
         shutil.copyfile(cached, target / NOTICES)
-    version = (ROOT / "VERSION").read_text().strip()
-    (target / "Qt-macOS.txt").write_text(
-        f"""This JoomEngine app dynamically links Qt {QT} under LGPLv3.
-The Qt frameworks include Chromium and other third-party components under
-their respective licenses. {NOTICES} contains the license texts,
-copyright notices and attribution records from the upstream source release,
-including optional components. Their paths identify the upstream projects.
-
-The complete, unmodified source archive, including Chromium, is available
-beside this DMG in the tagged JoomEngine release and from Qt's archive.
-
-https://github.com/joomengine/joomengine/releases/download/v{version}/{SOURCE}
-{URL}
-SHA-256  {SHA256}
-
-You may replace Qt with an interface-compatible modified build. To rebuild
-and run JoomEngine against your Qt, obtain the application source at tag
-v{version}, put the modified Qt SDK's bin directory first on PATH, and run
+    platform = "AppImage" if appimage else "macOS"
+    if appimage:
+        rebuilding = """Run the AppImage with --appimage-extract, replace the compatible shared
+libraries under squashfs-root/usr/lib, and launch squashfs-root/AppRun.
+The source tree includes the complete build recipe in packaging/appimage."""
+    else:
+        rebuilding = """To rebuild and run JoomEngine against your Qt, put the modified Qt SDK's
+bin directory first on PATH, then run
 
     qt-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build --config Release
@@ -141,19 +131,37 @@ v{version}, put the modified Qt SDK's bin directory first on PATH, and run
 
 The packaging script uses a local ad hoc signature when Developer ID
 credentials are absent. Open the resulting disk image and copy the modified
-app to Applications. Debugging and reverse engineering library modifications
-are permitted.
+app to Applications."""
+    (target / f"Qt-{platform}.txt").write_text(
+        f"""This JoomEngine app dynamically links Qt {QT} under LGPLv3.
+The Qt libraries include Chromium and other third-party components under
+their respective licenses. {NOTICES} contains the license texts,
+copyright notices and attribution records from the upstream source release,
+including optional components. Their paths identify the upstream projects.
+
+The complete, unmodified source archive, including Chromium, is available
+in the JoomEngine release assets and from Qt's archive.
+
+https://github.com/joomengine/joomengine/releases
+Release asset: {SOURCE}
+{URL}
+SHA-256  {SHA256}
+
+You may replace Qt with an interface-compatible modified build.
+{rebuilding}
+Debugging and reverse engineering library modifications are permitted.
 """, encoding="utf-8")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--appimage", action="store_true", help="write Linux AppImage rebuilding instructions")
     parser.add_argument("--source-only", action="store_true",
                         help="copy the checksum-verified source asset into DIRECTORY for publication")
     parser.add_argument("directory", type=Path, metavar="DIRECTORY",
-                        help="macOS bundle Resources directory or release source destination")
+                        help="package resources directory or release source destination")
     args = parser.parse_args()
     if args.source_only:
         get_source(args.directory, copy_override=True)
     else:
-        install(args.directory)
+        install(args.directory, appimage=args.appimage)

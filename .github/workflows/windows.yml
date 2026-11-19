@@ -1,4 +1,4 @@
-name: Windows MSIX
+name: Windows packages
 
 on:
   workflow_call:
@@ -43,8 +43,8 @@ jobs:
         shell: pwsh
         env:
           WINDOWS_PUBLISHER: ${{ vars.WINDOWS_PUBLISHER }}
-          WINDOWS_PFX_BASE64: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_BASE64 || '' }}
-          WINDOWS_PFX_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_PASSWORD || '' }}
+          WINDOWS_PFX_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_BASE64 || '' }}
+          WINDOWS_PFX_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_PASSWORD || '' }}
         run: |
           $pfx = Join-Path $env:RUNNER_TEMP 'joomengine-release.pfx'
           try {
@@ -61,6 +61,52 @@ jobs:
         run: |
           $msix = Get-Item 'dist/packages/*.msix'
           ./packaging/windows/test-package.ps1 -PackagePath $msix.FullName
+      - name: Extract the portable ZIP and open Playground
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'Portable JoomEngine'
+          $zip = Get-Item 'dist/packages/*.zip'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $directory
+          foreach ($file in 'LICENSE', 'NOTICE', 'LICENSES/WebView2-SDK.txt', 'LICENSES/CHOC-ISC.txt') {
+            if (-not (Test-Path -LiteralPath (Join-Path $directory $file) -PathType Leaf)) { throw "Missing $file in portable ZIP." }
+          }
+          ./packaging/windows/check-window.ps1 -Executable (Join-Path $directory 'JoomEngine.exe')
+      - name: Build and validate the Partner Center upload archive
+        id: store
+        shell: pwsh
+        env:
+          MICROSOFT_STORE_PACKAGE_NAME: ${{ vars.MICROSOFT_STORE_PACKAGE_NAME }}
+          MICROSOFT_STORE_PACKAGE_PUBLISHER: ${{ vars.MICROSOFT_STORE_PACKAGE_PUBLISHER }}
+          MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME }}
+          MICROSOFT_STORE_PUBLISH: ${{ vars.MICROSOFT_STORE_PUBLISH }}
+        run: |
+          $values = @($env:MICROSOFT_STORE_PACKAGE_NAME, $env:MICROSOFT_STORE_PACKAGE_PUBLISHER, $env:MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME)
+          $configured = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+          if ($configured -eq 0 -and $env:MICROSOFT_STORE_PUBLISH -ne 'true') {
+            # Exercise Store packaging in CI before a maintainer reserves the Store identity.
+            $env:MICROSOFT_STORE_PACKAGE_NAME = 'JoomEngine.CI'
+            $env:MICROSOFT_STORE_PACKAGE_PUBLISHER = 'CN=JoomEngine CI'
+            $env:MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME = 'JoomEngine CI'
+          } elseif ($configured -ne 3) {
+            throw 'Set all three Partner Center package identity variables. See docs/publishing-microsoft.md.'
+          }
+          ./scripts/package-windows.ps1 -Store
+          $upload = Get-Item 'dist/store/*.msixupload'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'Store submission'
+          [IO.Compression.ZipFile]::ExtractToDirectory($upload.FullName, $unpacked)
+          $msix = Get-Item (Join-Path $unpacked '*.msix')
+          $archive = [IO.Compression.ZipFile]::OpenRead($msix.FullName)
+          try {
+            $reader = [IO.StreamReader]::new($archive.GetEntry('AppxManifest.xml').Open())
+            try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            $version = [version](Get-Content VERSION -Raw).Trim()
+            $expected = "$($version.Major + 1).$($version.Minor).$($version.Build).0"
+            if ($manifest.Package.Identity.Name -cne $env:MICROSOFT_STORE_PACKAGE_NAME -or
+                $manifest.Package.Identity.Publisher -cne $env:MICROSOFT_STORE_PACKAGE_PUBLISHER -or
+                $manifest.Package.Properties.PublisherDisplayName -cne $env:MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME -or
+                $manifest.Package.Identity.Version -cne $expected) { throw 'Incorrect Partner Center package identity.' }
+          } finally { $archive.Dispose() }
+          if ($configured -eq 3) { 'registered=true' >> $env:GITHUB_OUTPUT }
       - name: Exercise the native WebView2 host with the live JCB site
         run: |
           cmake -S . -B build-qa -A x64 -DJOOMENGINE_NATIVE_QA=ON
@@ -70,5 +116,18 @@ jobs:
         with:
           name: windows-msix
           path: dist/packages/*.msix
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/packages/*.zip
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: steps.store.outputs.registered == 'true'
+        with:
+          name: microsoft-store-submission
+          path: dist/store/*.msixupload
           if-no-files-found: error
           compression-level: 0

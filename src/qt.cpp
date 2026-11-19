@@ -16,7 +16,9 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
+#include <QLayout>
 #include <QMainWindow>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStandardPaths>
@@ -54,15 +56,26 @@ public:
             setAttribute(Qt::WA_QuitOnClose, false);
         }
         setCentralWidget(browser);
+        // A QMainWindow status bar consumes a row even when its message is empty.
+        // Give errors a place to appear without reserving space on a healthy page.
+        auto* errors = new QStatusBar(this);
+        errors->setSizeGripEnabled(false);
+        setStatusBar(errors);
+        errors->hide();
         browser->setPage(page);
 
+#ifndef Q_OS_MACOS
+        menuBar()->setNativeMenuBar(false);
+#endif
         auto* file = menuBar()->addMenu(tr("&File"));
         auto* closeWindow = file->addAction(tr("Close Window"));
         closeWindow->setShortcuts(QKeySequence::Close);
+        addAction(closeWindow);
         connect(closeWindow, &QAction::triggered, this, &QWidget::close);
         auto* quit = file->addAction(tr("Quit JoomEngine"));
         quit->setMenuRole(QAction::QuitRole);
         quit->setShortcuts(QKeySequence::Quit);
+        addAction(quit);
         connect(quit, &QAction::triggered, owner, &QWidget::close);
 
         auto* edit = menuBar()->addMenu(tr("&Edit"));
@@ -70,6 +83,7 @@ public:
             auto* item = page->action(action);
             item->setShortcuts(shortcut);
             edit->addAction(item);
+            addAction(item);
         };
         addEdit(QWebEnginePage::Undo, QKeySequence::Undo);
         addEdit(QWebEnginePage::Redo, QKeySequence::Redo);
@@ -79,7 +93,9 @@ public:
         addEdit(QWebEnginePage::Paste, QKeySequence::Paste);
         addEdit(QWebEnginePage::SelectAll, QKeySequence::SelectAll);
 
-        auto* reload = menuBar()->addMenu(tr("&View"))->addAction(tr("&Reload"));
+        auto* view = menuBar()->addMenu(tr("&View"));
+        auto* reload = view->addAction(tr("&Reload"));
+        addAction(reload);
         reload->setShortcuts(QKeySequence::Refresh);
         // Qt's Refresh binding on some Linux desktops only includes F5.
         auto shortcuts = reload->shortcuts();
@@ -87,6 +103,23 @@ public:
         if (!shortcuts.contains(controlR)) shortcuts.append(controlR);
         reload->setShortcuts(shortcuts);
         connect(reload, &QAction::triggered, browser, &QWebEngineView::reload);
+
+#ifndef Q_OS_MACOS
+        toggleMenu = view->addAction(tr("Show Menu Bar"));
+        toggleMenu->setCheckable(true);
+        toggleMenu->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
+        addAction(toggleMenu);
+        connect(toggleMenu, &QAction::toggled, menuBar(), &QWidget::setVisible);
+        menuBar()->hide();
+        browser->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(browser, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+            auto* context = browser->createStandardContextMenu();
+            context->setAttribute(Qt::WA_DeleteOnClose);
+            context->addSeparator();
+            context->addAction(toggleMenu);
+            context->popup(browser->mapToGlobal(at));
+        });
+#endif
 
         connect(page, &QWebEnginePage::navigationRequested, this, [](QWebEngineNavigationRequest& request) {
             if (!request.isMainFrame() || joomengine::isWorkspaceURL(request.url().toEncoded().toStdString())) return;
@@ -109,17 +142,20 @@ public:
             closeApproved = true;
             close();
         });
-        connect(page, &QWebEnginePage::loadingChanged, this, [this](const QWebEngineLoadingInfo& info) {
+        connect(page, &QWebEnginePage::loadingChanged, this, [this, errors](const QWebEngineLoadingInfo& info) {
             if (info.status() == QWebEngineLoadingInfo::LoadStartedStatus) {
-                statusBar()->clearMessage();
+                errors->hide();
+                errors->clearMessage();
                 rendererStopped = false;
             } else if (info.status() == QWebEngineLoadingInfo::LoadFailedStatus) {
-                statusBar()->showMessage(tr("The page could not load. Use View → Reload to try again."));
+                errors->showMessage(tr("The page could not load. Press %1 to try again.").arg(reloadShortcut()));
+                errors->show();
             }
         });
-        connect(page, &QWebEnginePage::renderProcessTerminated, this, [this] {
+        connect(page, &QWebEnginePage::renderProcessTerminated, this, [this, errors] {
             rendererStopped = true;
-            statusBar()->showMessage(tr("The browser process stopped. Use View → Reload to reopen the workspace."));
+            errors->showMessage(tr("The browser process stopped. Press %1 to reopen the workspace.").arg(reloadShortcut()));
+            errors->show();
         });
         connect(page, &QWebEnginePage::fileSystemAccessRequested, this, [this](QWebEngineFileSystemAccessRequest request) {
             const bool writing = request.accessFlags().testFlag(QWebEngineFileSystemAccessRequest::Write);
@@ -155,7 +191,31 @@ public:
         activateWindow();
     }
 
+#ifdef JOOMENGINE_NATIVE_QA
+    bool verifyCompactLayout() {
+        layout()->activate();
+        if (browser->geometry() != contentsRect()) return false;
+#ifndef Q_OS_MACOS
+        if (toggleMenu->isChecked() || menuBar()->isVisible()) return false;
+        toggleMenu->trigger();
+        layout()->activate();
+        const QRect expanded = browser->geometry();
+        const bool barOpened = menuBar()->isVisible() && expanded.top() > contentsRect().top()
+                            && expanded.bottom() == contentsRect().bottom();
+        toggleMenu->trigger();
+        layout()->activate();
+        return barOpened && menuBar()->isHidden() && browser->geometry() == contentsRect();
+#else
+        return menuBar()->isNativeMenuBar();
+#endif
+    }
+#endif
+
 private:
+    static QString reloadShortcut() {
+        return QKeySequence(Qt::CTRL | Qt::Key_R).toString(QKeySequence::NativeText);
+    }
+
     void closeEvent(QCloseEvent* event) override {
         if (closeApproved || rendererStopped) {
             // Once the owner has passed Chromium's beforeunload check, end all
@@ -175,6 +235,9 @@ private:
         page->triggerAction(QWebEnginePage::RequestClose);
     }
 
+#ifndef Q_OS_MACOS
+    QAction* toggleMenu = nullptr;
+#endif
     WorkspaceWindow* owner;
     QWebEngineView* browser;
     QWebEnginePage* page;
@@ -218,7 +281,7 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName(QString::fromLatin1(joomengine::name));
     QApplication::setOrganizationDomain(QStringLiteral("joomengine.org"));
     QApplication::setDesktopFileName(QString::fromLatin1(joomengine::id));
-    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("joomengine")));
+    QApplication::setWindowIcon(QIcon::fromTheme(QString::fromLatin1(joomengine::id), QIcon::fromTheme(QStringLiteral("joomengine"))));
 #ifdef JOOMENGINE_NATIVE_QA
     const QString data = QString::fromStdString(qa::profilePath());
     const QString cache = QDir(data).filePath(QStringLiteral("cache"));
@@ -275,6 +338,12 @@ int main(int argc, char** argv) {
         owner.bringToFront();
     });
     owner.show();
+#ifdef JOOMENGINE_NATIVE_QA
+    if (!owner.verifyCompactLayout()) {
+        qCritical("The embedded browser failed the native window layout check.");
+        return 1;
+    }
+#endif
     const int status = app.exec();
 #ifdef JOOMENGINE_NATIVE_QA
     return status ? status : qa::exitCode();

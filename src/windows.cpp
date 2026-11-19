@@ -24,6 +24,14 @@ namespace {
 constexpr wchar_t windowClass[] = L"JoomEngine.Workspace";
 constexpr UINT reloadCommand = 101;
 constexpr UINT closeCommand = 102;
+constexpr UINT toggleMenuCommand = 103;
+constexpr UINT systemToggleMenuCommand = 0x1FA0; // System-menu commands reserve their low four bits.
+struct EditCommand { UINT id; const wchar_t* label; const wchar_t* browserCommand; };
+constexpr EditCommand editCommands[] = {
+    {104, L"&Undo\tCtrl+Z", L"Undo"}, {105, L"&Redo\tCtrl+Y", L"Redo"},
+    {106, L"Cu&t\tCtrl+X", L"Cut"}, {107, L"&Copy\tCtrl+C", L"Copy"},
+    {108, L"&Paste\tCtrl+V", L"Paste"}, {109, L"Select &All\tCtrl+A", L"SelectAll"}
+};
 ComPtr<ICoreWebView2Environment> environment;
 
 std::wstring wide(std::string_view source) {
@@ -67,18 +75,77 @@ struct Window : std::enable_shared_from_this<Window> {
     static WindowPtr create(HWND opener) {
         auto self = std::make_shared<Window>();
         self->owner = !opener;
-        HMENU menu = CreateMenu();
-        HMENU file = CreatePopupMenu(), view = CreatePopupMenu();
-        AppendMenuW(file, MF_STRING, closeCommand, L"&Close");
-        AppendMenuW(view, MF_STRING, reloadCommand, L"&Reload\tCtrl+R");
-        AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(file), L"&File");
-        AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(view), L"&View");
         HWND window = CreateWindowExW(0, windowClass, opener ? L"JoomEngine tool" : L"JoomEngine",
             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, opener ? 1024 : 1320, 860,
-            opener, menu, GetModuleHandleW(nullptr), &self);
-        if (!window) { DestroyMenu(menu); return {}; }
+            opener, nullptr, GetModuleHandleW(nullptr), &self);
+        if (!window) return {};
+        HMENU system = GetSystemMenu(window, FALSE);
+        AppendMenuW(system, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(system, MF_STRING, systemToggleMenuCommand, L"Show Menu Bar\tCtrl+Shift+M");
         ShowWindow(window, SW_SHOWNORMAL);
         return self;
+    }
+
+    void toggleMenu() {
+        if (HMENU oldMenu = GetMenu(hwnd)) {
+            if (!SetMenu(hwnd, nullptr)) return;
+            DestroyMenu(oldMenu);
+        } else {
+            HMENU menu = CreateMenu(), file = CreatePopupMenu(), edit = CreatePopupMenu(), view = CreatePopupMenu();
+            AppendMenuW(file, MF_STRING, closeCommand, L"&Close");
+            for (const auto& command : editCommands)
+                AppendMenuW(edit, MF_STRING, command.id, command.label);
+            AppendMenuW(view, MF_STRING, reloadCommand, L"&Reload\tCtrl+R");
+            AppendMenuW(view, MF_CHECKED, toggleMenuCommand, L"Show &Menu Bar\tCtrl+Shift+M");
+            AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(file), L"&File");
+            AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(edit), L"&Edit");
+            AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(view), L"&View");
+            if (!SetMenu(hwnd, menu)) { DestroyMenu(menu); return; }
+        }
+        CheckMenuItem(GetSystemMenu(hwnd, FALSE), systemToggleMenuCommand,
+                      MF_BYCOMMAND | (GetMenu(hwnd) ? MF_CHECKED : MF_UNCHECKED));
+        DrawMenuBar(hwnd);
+        resize();
+    }
+
+    void edit(const wchar_t* browserCommand) {
+        if (!web || !controller) return;
+        controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+        // Dispatch inside the focused browser frame, including detached tools
+        // and cross-origin frames, without injecting script into page content.
+        const std::wstring args = std::wstring(LR"({"type":"rawKeyDown","commands":[")") + browserCommand + LR"("]})";
+        web->CallDevToolsProtocolMethod(L"Input.dispatchKeyEvent", args.c_str(),
+            Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>([](HRESULT result, LPCWSTR) -> HRESULT {
+                if (FAILED(result)) OutputDebugStringW(L"JoomEngine: the WebView2 edit command failed.\n");
+                return S_OK;
+            }).Get());
+    }
+
+    void addContextMenuToggle() {
+        ComPtr<ICoreWebView2_11> menus;
+        ComPtr<ICoreWebView2Environment9> factory;
+        ComPtr<ICoreWebView2ContextMenuItem> toggle;
+        if (FAILED(web.As(&menus)) || FAILED(environment.As(&factory)) ||
+            FAILED(factory->CreateContextMenuItem(L"Show Menu Bar", nullptr, COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_CHECK_BOX, &toggle)))
+            return; // The title-bar system menu is available on every runtime.
+        std::weak_ptr<Window> weak = shared_from_this();
+        EventRegistrationToken token{};
+        toggle->add_CustomItemSelected(Callback<ICoreWebView2CustomItemSelectedEventHandler>(
+            [weak](ICoreWebView2ContextMenuItem*, IUnknown*) -> HRESULT {
+                if (auto self = weak.lock(); self && self->hwnd)
+                    PostMessageW(self->hwnd, WM_COMMAND, toggleMenuCommand, 0);
+                return S_OK;
+            }).Get(), &token);
+        menus->add_ContextMenuRequested(Callback<ICoreWebView2ContextMenuRequestedEventHandler>(
+            [weak, toggle](ICoreWebView2*, ICoreWebView2ContextMenuRequestedEventArgs* args) -> HRESULT {
+                auto self = weak.lock();
+                ComPtr<ICoreWebView2ContextMenuItemCollection> items;
+                UINT32 count = 0;
+                if (!self || !self->hwnd || FAILED(args->get_MenuItems(&items)) || FAILED(items->get_Count(&count)))
+                    return S_OK;
+                toggle->put_IsChecked(GetMenu(self->hwnd) != nullptr);
+                return items->InsertValueAtIndex(count, toggle.Get());
+            }).Get(), &token);
     }
 
     void resize() {
@@ -88,6 +155,20 @@ struct Window : std::enable_shared_from_this<Window> {
             controller->put_Bounds(bounds);
         }
     }
+
+#ifdef JOOMENGINE_NATIVE_QA
+    bool verifyCompactLayout() {
+        const auto fillsClient = [this] {
+            RECT native{}, browser{};
+            return GetClientRect(hwnd, &native) && SUCCEEDED(controller->get_Bounds(&browser)) && EqualRect(&native, &browser);
+        };
+        if (GetMenu(hwnd) || !fillsClient()) return false;
+        toggleMenu();
+        const bool expanded = GetMenu(hwnd) && fillsClient();
+        toggleMenu();
+        return expanded && !GetMenu(hwnd) && fillsClient();
+    }
+#endif
 
     void reload() {
         if (!web) return;
@@ -115,6 +196,12 @@ struct Window : std::enable_shared_from_this<Window> {
                     self->controller = created;
                     self->resize();
                     self->events();
+#ifdef JOOMENGINE_NATIVE_QA
+                    if (self->owner && !self->verifyCompactLayout()) {
+                        PostMessageW(self->hwnd, WM_CLOSE, 0, 0);
+                        return S_OK;
+                    }
+#endif
                     if (popup) {
                         // Give the original JS call a WindowProxy in the same
                         // environment, before any host-initiated navigation.
@@ -200,17 +287,24 @@ struct Window : std::enable_shared_from_this<Window> {
                 if (auto self = weak.lock(); self && self->hwnd) PostMessageW(self->hwnd, WM_CLOSE, 0, 0);
                 return S_OK;
             }).Get(), &token);
+        addContextMenuToggle();
         controller->add_AcceleratorKeyPressed(Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>(
             [weak](ICoreWebView2Controller*, ICoreWebView2AcceleratorKeyPressedEventArgs* e) -> HRESULT {
                 UINT key = 0;
                 COREWEBVIEW2_KEY_EVENT_KIND kind{};
                 e->get_VirtualKey(&key);
                 e->get_KeyEventKind(&kind);
-                if (kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && key == 'R' &&
-                    (GetKeyState(VK_CONTROL) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000)) {
+                if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN || !(GetKeyState(VK_CONTROL) & 0x8000)
+                    || (GetKeyState(VK_MENU) & 0x8000)) return S_OK;
+                UINT command = 0;
+                if (key == 'R') command = reloadCommand;
+                if (key == 'M' && (GetKeyState(VK_SHIFT) & 0x8000)) command = toggleMenuCommand;
+                if (command) {
                     e->put_Handled(TRUE);
-                    if (auto self = weak.lock(); self && self->hwnd)
-                        PostMessageW(self->hwnd, WM_COMMAND, reloadCommand, 0);
+                    COREWEBVIEW2_PHYSICAL_KEY_STATUS state{};
+                    e->get_PhysicalKeyStatus(&state);
+                    if (auto self = weak.lock(); self && self->hwnd && !state.WasKeyDown)
+                        PostMessageW(self->hwnd, WM_COMMAND, command, 0);
                 }
                 return S_OK;
             }).Get(), &token);
@@ -256,7 +350,21 @@ LRESULT CALLBACK dispatch(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (handle) {
         auto self = *handle;
         switch (msg) {
+            case WM_SYSCOMMAND:
+                if ((wParam & 0xFFF0) == systemToggleMenuCommand) { self->toggleMenu(); return 0; }
+                break;
+            case WM_KEYDOWN:
+                if (wParam == 'M' && (GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000)
+                    && !(GetKeyState(VK_MENU) & 0x8000) && !(lParam & (1L << 30))) {
+                    self->toggleMenu();
+                    return 0;
+                }
+                break;
             case WM_COMMAND:
+                if (LOWORD(wParam) == toggleMenuCommand) { self->toggleMenu(); return 0; }
+                for (const auto& command : editCommands) {
+                    if (LOWORD(wParam) == command.id) { self->edit(command.browserCommand); return 0; }
+                }
                 if (LOWORD(wParam) == reloadCommand) { self->reload(); return 0; }
                 if (LOWORD(wParam) == closeCommand) { PostMessageW(hwnd, WM_CLOSE, 0, 0); return 0; }
                 break;

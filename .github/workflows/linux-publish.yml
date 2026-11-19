@@ -1,0 +1,86 @@
+name: Publish Linux distribution packages
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  snap:
+    name: Snap Store stable
+    concurrency: joomengine-snap-stable
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.SNAP_STORE_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    environment: distribution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the public release Snap
+        id: asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          file=$(packaging/publish/release-file.sh '*.snap')
+          echo "path=$file" >> "$GITHUB_OUTPUT"
+          python3 packaging/publish/snap-status.py "$file" >> "$GITHUB_OUTPUT"
+      - uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1
+        if: steps.asset.outputs.upload == 'true'
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.asset.outputs.path }}
+          release: stable
+
+  debian:
+    name: Signed Debian APT repository
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.DEBIAN_REPO_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    environment: distribution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./packaging/publish/cloudsmith
+        with:
+          format: deb
+          distribution: debian/trixie
+          namespace: ${{ vars.CLOUDSMITH_NAMESPACE }}
+          repository: ${{ vars.CLOUDSMITH_REPOSITORY }}
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          github-token: ${{ github.token }}
+
+  fedora:
+    name: Signed Fedora RPM repository
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.RPM_REPO_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    environment: distribution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./packaging/publish/cloudsmith
+        with:
+          format: rpm
+          distribution: fedora/44
+          namespace: ${{ vars.CLOUDSMITH_NAMESPACE }}
+          repository: ${{ vars.CLOUDSMITH_REPOSITORY }}
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          github-token: ${{ github.token }}
+
+  arch:
+    name: Update Arch User Repository recipe
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.AUR_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    environment: distribution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish tagged source recipe and native makepkg metadata
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_KNOWN_HOSTS: ${{ vars.AUR_KNOWN_HOSTS }}
+          AUR_MAINTAINER_EMAIL: ${{ vars.AUR_MAINTAINER_EMAIL }}
+        run: packaging/publish/aur.sh

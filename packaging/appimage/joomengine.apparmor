@@ -1,0 +1,8 @@
+# Ubuntu 24.04+ allows user namespaces for named applications. Install the
+# AppImage at the root-owned path below before loading this optional profile.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile joomengine-appimage /opt/joomengine/JoomEngine.AppImage flags=(unconfined) {
+  userns,
+}
