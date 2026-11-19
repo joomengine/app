@@ -9,6 +9,7 @@ description: |
 website: https://playground.joomengine.org/
 source-code: https://github.com/joomengine/app
 issues: https://github.com/joomengine/app/issues
+contact: https://github.com/joomengine/app/issues
 license: Apache-2.0
 grade: stable
 confinement: strict

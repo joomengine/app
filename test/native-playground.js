@@ -13,6 +13,23 @@
     if (/password|passwd|credential|secret|api[_-]?key|authorization|cookie|bearer\s|csrf|token|\bselect\b.+\bfrom\b|\b(?:insert|replace)\s+into\b|\bupdate\s+\S+\s+set\b|\b(?:delete\s+from|(?:create|drop|alter)\s+table)\b/i.test(line)) return '[redacted]';
     return line.replace(/[\w.+-]+@[\w.-]+/g, '[email]').replace(/[A-Za-z0-9_-]{32,}/g, '[id]').slice(0, limit);
   }
+  function errorFacts(sample) {
+    // Classify plain-text CGI/WASM errors without exposing SQL, file contents,
+    // query parameters, credentials, or application stack traces.
+    const normalized = sample.toLowerCase();
+    const causes = ['allowed memory size', 'maximum execution time', 'failed to open stream',
+      'database is locked', 'database connection', 'access denied', 'table does not exist',
+      'out of memory', 'class not found', 'unhandled exception', 'fatal error',
+      'out of bounds memory access', 'memory access out of bounds', 'unreachable', 'stack overflow',
+      'maximum call stack', 'null function', 'function signature mismatch', 'indirect call',
+      'memory allocation', 'invalid array length', 'runtimeerror', 'rangeerror', 'typeerror',
+      'webassembly.exception', 'aborted', 'php restarted after an application error',
+      'internal server error'].filter(term => normalized.includes(term));
+    const detail = { causes };
+    const sqlState = sample.match(/SQLSTATE\[([A-Z0-9]{5})\]/i);
+    if (sqlState) detail.sqlState = sqlState[1];
+    return detail;
+  }
 
   // restoreResponse() constructs a Response for a PHP worker result. The login
   // code reads its status and discards the body on HTTP 500. Observe that read
@@ -42,14 +59,7 @@
           const heading = sample.match(/<h1\b[^>]*>([^<>]{1,240})<\/h1>/i)?.[1];
           if (title) record.title = safeText(title);
           if (heading) record.heading = safeText(heading);
-          // Classify useful error signatures without printing the response, SQL,
-          // headers or connection details—even when PHP returns plain text.
-          record.causes = ['Allowed memory size', 'Maximum execution time', 'failed to open stream',
-            'database is locked', 'database connection', 'access denied', 'table does not exist',
-            'out of memory', 'Class not found', 'unhandled exception', 'fatal error']
-            .filter(term => sample.toLowerCase().includes(term.toLowerCase()));
-          const sqlState = sample.match(/SQLSTATE\[([A-Z0-9]{5})\]/i);
-          if (sqlState) record.sqlState = sqlState[1];
+          Object.assign(record, errorFacts(sample));
         })().catch(() => {}));
       } catch { /* A previously consumed or unavailable response has no diagnostic body. */ }
     }
@@ -59,6 +69,8 @@
     const frame = element('site-frame');
     const state = {
       controller: Boolean(navigator.serviceWorker?.controller), isolated: Boolean(globalThis.crossOriginIsolated),
+      sharedBuffer: typeof globalThis.SharedArrayBuffer === 'function', atomics: typeof globalThis.Atomics?.add === 'function',
+      worker: typeof globalThis.Worker === 'function', wasmMemory: typeof globalThis.WebAssembly?.Memory === 'function',
       policy: new URL(location.href).searchParams.get('__je_coep')?.split(':').pop(),
       frame: Boolean(frame), hidden: frame?.hidden
     };
@@ -83,12 +95,14 @@
       .map(item => safeText(item.textContent, 105));
     return JSON.stringify({ ...dashboardState(), details: safeText(element('error-diagnostics')?.textContent, 240), activity });
   }
-  async function until(label, check, milliseconds = 90000) {
+  async function until(label, check, milliseconds = 90000, failure) {
     const deadline = Date.now() + milliseconds;
     let error = '';
     let nextReport = Date.now() + 30000;
     while (Date.now() < deadline) {
       try { if (check()) return; } catch (exception) { error = exception.message; }
+      const reason = failure?.();
+      if (reason) throw Error(reason);
       const failed = document.querySelector('#error-view:not([hidden]) #error-message')?.textContent?.trim();
       if (failed) throw Error('Playground reported: ' + safeText(failed, 260) + ' ' + diagnostics());
       if (Date.now() >= nextReport) {
@@ -105,6 +119,19 @@
       (label === dashboardLabel || label === controlledLabel ? ' ' + diagnostics() : ''));
   }
   const dbFrame = () => document.querySelector('iframe[title="Database"]');
+  function adminerFailure() {
+    const frame = dbFrame();
+    const doc = frame?.contentDocument;
+    if (doc?.readyState !== 'complete' || !/\/__adminer\/?$/.test(doc.location.pathname)) return '';
+    const status = frame.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus;
+    if (!(status >= 400) && doc.contentType !== 'text/plain') return '';
+    const body = doc.body?.innerText || '';
+    const feedback = [...document.querySelectorAll('#activity-log li')].slice(-3).map(node => node.textContent).join(' ');
+    return 'Adminer failed to load: ' + JSON.stringify({
+      route: '__adminer', status, type: doc.contentType, ready: doc.readyState, hidden: frame.hidden,
+      bodyLength: body.length, body: errorFacts(body.slice(0, 8192)), activity: errorFacts(feedback)
+    });
+  }
   async function fetchRepositoryCatalog() {
     // Use the same hosted HTTP transport as PHP cURL and extension downloads.
     // Checking a pinned file digest excludes an HTML error page or shell copy.
@@ -128,7 +155,7 @@
       const frame = dbFrame();
       return frame && !frame.hidden && !element('database-button').disabled &&
         frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('#content');
-    });
+    }, 90000, adminerFailure);
   }
   async function detach() {
     let tool;
