@@ -28,6 +28,15 @@
     const detail = { causes };
     const sqlState = sample.match(/SQLSTATE\[([A-Z0-9]{5})\]/i);
     if (sqlState) detail.sqlState = sqlState[1];
+    // PhpCgiBase._errorResponse joins a stack, STDERR and STDOUT. Safari's
+    // stack sometimes carries only Wasm function indices and JS line numbers.
+    const stack = sample.match(/Stacktrace:\s*([\s\S]*?)(?:\n={10,}|$)/i)?.[1];
+    if (stack) {
+      detail.wasmFrames = [...stack.matchAll(/(?:wasm-function\[([0-9]{1,8})\]|(?:^|\n)([0-9]{1,8})@\[wasm code\])/gi)]
+        .slice(0, 8).map(match => match[1] || match[2]);
+      detail.jsFrames = [...stack.matchAll(/\/(PhpCgi(?:Base|WebBase|Worker)\.mjs|php-worker\.mjs):([0-9]{1,8}):[0-9]{1,8}/gi)]
+        .slice(0, 5).map(match => match[1] + ':' + match[2]);
+    }
     return detail;
   }
 
@@ -36,6 +45,28 @@
   // in the QA page only. Keep requests, body streams and status values intact.
   const errors = [];
   const observations = [];
+  // A failed subframe navigation can become an opaque WebKit error document.
+  // Observe the owner replying to its service worker before WebKit renders it.
+  navigator.serviceWorker?.addEventListener('message', event => {
+    if (event.data?.type !== 'playground-request' || !event.ports[0]) return;
+    const url = new URL(event.data.request.url);
+    if (url.origin !== location.origin || !url.pathname.startsWith('/__site/')) return;
+    const route = /\/__adminer\/?$/.test(url.pathname) ? 'Adminer' :
+      /\/administrator\/index\.php$/.test(url.pathname) ? 'Joomla administrator' : '';
+    if (!route) return;
+    const port = event.ports[0];
+    const post = port.postMessage;
+    port.postMessage = function (value, ...rest) {
+      try {
+        if (value?.status >= 500 && !errors.some(record => record.route === route)) {
+          const bytes = new Uint8Array(value.body?.buffer ?? value.body, value.body?.byteOffset ?? 0,
+            Math.min(value.body?.byteLength ?? 0, 65536));
+          errors.push({ route, status: value.status, ...errorFacts(new TextDecoder().decode(bytes)) });
+        }
+      } catch { /* Diagnostics cannot interfere with the actual owner reply. */ }
+      return post.call(this, value, ...rest);
+    };
+  });
   const observed = new WeakSet();
   const descriptor = Object.getOwnPropertyDescriptor(Response.prototype, 'status');
   if (descriptor?.configurable) Object.defineProperty(Response.prototype, 'status', { ...descriptor, get() {
@@ -71,10 +102,20 @@
       controller: Boolean(navigator.serviceWorker?.controller), isolated: Boolean(globalThis.crossOriginIsolated),
       sharedBuffer: typeof globalThis.SharedArrayBuffer === 'function', atomics: typeof globalThis.Atomics?.add === 'function',
       worker: typeof globalThis.Worker === 'function', wasmMemory: typeof globalThis.WebAssembly?.Memory === 'function',
+      environment: document.documentElement?.dataset.playgroundEnvironment,
+      visible: document.visibilityState, update: element('build-update')?.hidden === false,
+      launch: element('embedded-launch')?.disabled === false,
       policy: new URL(location.href).searchParams.get('__je_coep')?.split(':').pop(),
       frame: Boolean(frame), hidden: frame?.hidden
     };
-    if (!frame) return state;
+    if (!frame) {
+      const resources = performance.getEntriesByType('resource')
+        .map(entry => new URL(entry.name, location.href)).filter(url => url.origin === location.origin)
+        .map(url => url.pathname.split('/').pop())
+        .filter(name => ['browser-compatibility.json', 'build.json', 'manifest.json', 'version-catalog.json', 'deploys.json'].includes(name));
+      state.catalogs = [...new Set(resources)];
+      return state;
+    }
     try {
       const doc = frame.contentDocument;
       const url = new URL(frame.contentWindow.location.href);
@@ -199,6 +240,34 @@
     }
   }
 
+  function visibleButton(id) {
+    const button = element(id);
+    return button && !button.disabled && button.getClientRects().length > 0 ? button : null;
+  }
+  function advanceFreshWelcome() {
+    // Only the isolated, fresh deployment can use welcome actions. Never
+    // restart a running/saved site, or retry a write or partially built site.
+    if (!config.write || element('site-frame') || document.hidden ||
+        document.documentElement.dataset.playgroundEnvironment !== 'ready') return;
+    const key = 'joomengine-native-qa-welcome-' + config.id;
+    const update = visibleButton('reload-build');
+    if (element('build-update')?.hidden === false) {
+      if (update && !sessionStorage.getItem(key + '-update')) {
+        sessionStorage.setItem(key + '-update', '1');
+        signal('progress', 'Playground offered a new build on welcome. Activated Reload Playground.');
+        update.click();
+      }
+      return;
+    }
+    if (element('welcome')?.hidden !== false || element('launch-countdown')?.hidden !== true || sessionStorage.getItem(key)) return;
+    const launch = visibleButton('embedded-launch');
+    const ready = [...document.querySelectorAll('#activity-log li')].at(-1)?.textContent.includes('Ready to launch.');
+    if (launch && ready) {
+      sessionStorage.setItem(key, '1');
+      signal('progress', 'Activated the available Launch button on the fresh welcome screen.');
+      launch.click();
+    }
+  }
   try {
     signal('progress', 'Loading the hosted Playground.');
     if (config.write) {
@@ -206,6 +275,7 @@
       await fetchRepositoryCatalog();
     }
     await until(dashboardLabel, () => {
+      advanceFreshWelcome();
       const state = dashboardState();
       if (!state.controller || !state.isolated || !state.frame || state.hidden || state.login || state.document !== 'complete') return false;
       // A component route by itself does not prove Joomla rendered anything.
