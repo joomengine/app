@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -51,6 +52,10 @@ def exported(path, identifier):
         return False
 
 
+class InitialNavigationTimeout(TimeoutError):
+    """The first macOS renderer produced no QA command in a fresh profile."""
+
+
 def exercise(binary, work, identifier, write):
     mode = 'write' if write else 'restore'
     log = work / (mode + '.log')
@@ -73,7 +78,8 @@ def exercise(binary, work, identifier, write):
     })
     print(f'Launching the native {mode} check.', flush=True)
     process = subprocess.Popen([str(binary)], env=env)
-    deadline = time.monotonic() + 900
+    started = time.monotonic()
+    deadline = started + 900
     lines_seen = 0
     try:
         while True:
@@ -93,7 +99,11 @@ def exercise(binary, work, identifier, write):
                 if not write and not any(line.startswith('reload ') for line in lines):
                     raise RuntimeError('The restored project did not receive a native Reload action.')
                 return
-            if time.monotonic() >= deadline:
+            now = time.monotonic()
+            if (sys.platform == 'darwin' and write and not lines_seen and not bundle.exists()
+                    and now - started >= 120):
+                raise InitialNavigationTimeout('No QA command from the first macOS document in 120 seconds.')
+            if now >= deadline:
                 raise TimeoutError(f'Native {mode} check timed out; last state: {lines[-3:]}.')
             time.sleep(0.4)
     finally:
@@ -118,10 +128,22 @@ def main():
     # macOS may canonicalize /var paths to /private/var. Share one real path.
     work = Path(tempfile.mkdtemp(prefix='joomengine-native-')).resolve()
     try:
-        (work / 'profile').mkdir()
+        active = work
         identifier = str(uuid.uuid4())
-        exercise(binary, work, identifier, write=True)
-        exercise(binary, work, identifier, write=False)
+        (active / 'profile').mkdir()
+        try:
+            exercise(binary, active, identifier, write=True)
+        except InitialNavigationTimeout as error:
+            # An Intel macOS runner kept a live host with no responsive document.
+            # Start Chromium once more with a new test profile and marker. Once
+            # any command arrives (including the required select-all before SQL),
+            # errors and timeouts fail the run instead of replaying the scenario.
+            print(f'{error} Starting one independent cold launch.', flush=True)
+            active = work / 'second-launch'
+            (active / 'profile').mkdir(parents=True)
+            identifier = str(uuid.uuid4())
+            exercise(binary, active, identifier, write=True)
+        exercise(binary, active, identifier, write=False)
         print('Passed real JCB startup, external HTTPS, detached tool, site export, process restart and native reload.')
     finally:
         # WebView2 may release its profile files shortly after the host exits.

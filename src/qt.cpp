@@ -171,11 +171,27 @@ public:
         if (!opener) {
             QWebEngineScript script;
             script.setName(QStringLiteral("JoomEngine native QA"));
-            script.setSourceCode(QString::fromStdString(qa::script()));
-            script.setInjectionPoint(QWebEngineScript::DocumentCreation);
+            const QString source = QString::fromStdString(qa::script());
+            if (source.isEmpty()) qFatal("The native QA driver is missing or empty.");
+            script.setSourceCode(source);
+            // The driver reports through document.title, which needs a parsed head.
+            script.setInjectionPoint(QWebEngineScript::DocumentReady);
             script.setWorldId(QWebEngineScript::MainWorld);
             script.setRunsOnSubFrames(false);
             page->scripts().insert(script);
+            qInfo("Native QA installed the document-ready script.");
+            connect(page, &QWebEnginePage::renderProcessPidChanged, this, [](qint64 pid) {
+                qInfo() << "Native QA renderer process" << pid;
+            });
+            connect(page, &QWebEnginePage::renderProcessTerminated, this,
+                    [](QWebEnginePage::RenderProcessTerminationStatus reason, int code) {
+                qWarning() << "Native QA renderer stopped" << reason << "exit" << code;
+            });
+            connect(page, &QWebEnginePage::loadingChanged, this, [](const QWebEngineLoadingInfo& info) {
+                // Log only the host and numeric errors, never project URLs, query strings or page data.
+                qInfo() << "Native QA navigation" << info.status() << info.url().host()
+                        << "error domain" << info.errorDomain() << "code" << info.errorCode();
+            });
             connect(page, &QWebEnginePage::titleChanged, this, [this, reload](const QString& title) {
                 qa::onTitle(title.toStdString(), [reload] { reload->trigger(); }, [this] { close(); },
                     [this] { page->action(QWebEnginePage::SelectAll)->trigger(); });
@@ -340,6 +356,7 @@ int main(int argc, char** argv) {
     });
     owner.show();
 #ifdef JOOMENGINE_NATIVE_QA
+    qInfo("Native QA opened the owner window.");
     if (!owner.verifyCompactLayout()) {
         qCritical("The embedded browser failed the native window layout check.");
         return 1;
