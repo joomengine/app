@@ -47,7 +47,7 @@ async function launch(executable, profile, args = []) {
       return targets[0]?.webSocketDebuggerUrl;
     }), exited.then(([code, signal]) => { throw Error('JoomEngine exited before startup (' + (signal || code) + ')'); })]);
     socket = new WebSocket(endpoint);
-    await once(socket, 'open');
+    await once(socket, 'open', { signal: AbortSignal.timeout(5000) });
     let id = 0;
     async function main(expression) {
       const request = ++id;
@@ -64,11 +64,11 @@ async function launch(executable, profile, args = []) {
         }
         socket.addEventListener('message', message);
         socket.send(JSON.stringify({ id: request, method: 'Runtime.evaluate',
-          params: { expression, awaitPromise: true, returnByValue: true } }));
+          params: { expression, awaitPromise: true, returnByValue: true, includeCommandLineAPI: true } }));
       });
     }
     await waitFor('the first native window', () => main(`
-      globalThis.smokeElectron = process.mainModule.require('electron');
+      globalThis.smokeElectron = require('electron');
       globalThis.smokeOwner = smokeElectron.BrowserWindow.getAllWindows()[0];
       Boolean(smokeOwner)
     `));

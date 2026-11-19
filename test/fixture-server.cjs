@@ -2,7 +2,7 @@
 
 const https = require('node:https');
 const path = require('node:path');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { createHash, X509Certificate } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { once } = require('node:events');
@@ -12,8 +12,14 @@ const domain = 'playground.joomengine.org';
 async function serveFixture(directory) {
   const keyPath = path.join(directory, 'fixture.key');
   const certPath = path.join(directory, 'fixture.crt');
+  // LibreSSL on macOS and OpenSSL on Windows/Linux accept the same config.
+  const configPath = path.join(directory, 'openssl.cnf');
+  writeFileSync(configPath, [
+    '[req]', 'prompt=no', 'distinguished_name=subject', 'x509_extensions=extensions',
+    '[subject]', 'CN=' + domain, '[extensions]', 'subjectAltName=DNS:' + domain
+  ].join('\n') + '\n');
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-    '-subj', '/CN=' + domain, '-addext', 'subjectAltName=DNS:' + domain,
+    '-config', configPath,
     '-keyout', keyPath, '-out', certPath], { stdio: ['ignore', 'ignore', 'pipe'] });
   const cert = readFileSync(certPath);
   const publicKey = new X509Certificate(cert).publicKey.export({ type: 'spki', format: 'der' });
