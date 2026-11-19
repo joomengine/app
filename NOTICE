@@ -23,6 +23,9 @@ retain their respective licenses. The Linux archive uses distribution
 libraries. The Snap uses a separately installed KDE content runtime. The
 Snap includes the Ubuntu libraries and font configuration listed in
 snap/snapcraft.yaml. Their package notices are under usr/share/doc in the Snap.
+The AppImage bundles Qt and includes its notices and component credits.
+The Flatpak includes notices for the QtWebEngine BaseApp and uses the shared
+KDE runtime. Native Debian, Arch and Fedora packages use distribution Qt.
 The macOS app includes Qt frameworks and Chromium resources. Its Resources
 directory contains the notices and information for obtaining the matching
 source and rebuilding with modified libraries.

@@ -1,0 +1,56 @@
+name: Portable Linux applications
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    name: Flatpak (x86-64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flatpak, OSTree and the native test display
+        run: .github/scripts/install-linux-build-deps.sh flatpak flatpak-builder ostree dbus-user-session xdg-desktop-portal-gtk
+      - name: Build the distributable Flatpak and its corresponding WebEngine source archive
+        run: bash packaging/flatpak/build.sh
+      - name: Open the installed bundle and exercise JCB inside Flatpak
+        run: bash packaging/flatpak/test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-flatpak
+          path: dist/packages/*.flatpak
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-flatpak-source
+          path: dist/flatpak-source/*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+
+  appimage:
+    name: AppImage (x86-64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qt-linux-sdk
+          key: qt-linux-sdk-${{ hashFiles('packaging/appimage/qt-sdk.lock', 'packaging/appimage/install-sdk.sh') }}
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qt-notices
+          key: qt-notices-6.11.2-${{ hashFiles('scripts/package-qt-notices.py') }}
+      - name: Build both images and exercise the installed runtime
+        run: bash packaging/appimage/ci.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/packages/*.AppImage
+          if-no-files-found: error
+          compression-level: 0

@@ -1,0 +1,39 @@
+{
+  "id": "org.joomengine.app",
+  "branch": "stable",
+  "runtime": "org.kde.Platform",
+  "runtime-version": "6.11",
+  "sdk": "org.kde.Sdk",
+  "base": "io.qt.qtwebengine.BaseApp",
+  "base-version": "6.11",
+  "command": "joomengine",
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=fallback-x11",
+    "--socket=wayland",
+    "--socket=pulseaudio",
+    "--device=dri",
+    "--env=QTWEBENGINEPROCESS_PATH=/app/bin/QtWebEngineProcess"
+  ],
+  "cleanup-commands": ["/app/cleanup-BaseApp.sh"],
+  "modules": [
+    {
+      "name": "joomengine",
+      "buildsystem": "cmake-ninja",
+      "builddir": true,
+      "config-opts": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_PREFIX_PATH=/app",
+        "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath-link,/app/lib"
+      ],
+      "post-install": [
+        "install -Dm644 /run/build/joomengine/packaging/flatpak/BASEAPP.txt /app/share/doc/joomengine/Flatpak-WebEngine.txt",
+        "if test -f /run/build/joomengine/packaging/flatpak/source-revision.txt; then install -m644 /run/build/joomengine/packaging/flatpak/source-revision.txt /run/build/joomengine/packaging/flatpak/base-manifest.json /app/share/doc/joomengine/; fi"
+      ],
+      "sources": [
+        {"type": "dir", "path": "../..", "skip": [".git", ".flatpak-builder", "dist", "build", "build-qa"]}
+      ]
+    }
+  ]
+}

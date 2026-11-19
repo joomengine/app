@@ -1,0 +1,17 @@
+JoomEngine's Flatpak includes the WebEngine build from
+io.qt.qtwebengine.BaseApp. The KDE runtime supplies the other Qt libraries.
+Qt WebEngine is used under LGPL-3.0. Its Chromium components and the base
+app dependencies retain their own terms. See the installed application
+licenses and the upstream manifest at https://github.com/flathub/io.qt.qtwebengine.BaseApp.
+
+Each GitHub build distributes the matching QtWebEngine-Flatpak-6.11-x86_64-Sources.tar.gz
+beside its application packages. The tarball contains the complete Flathub
+source extension, including the modules and patches used for this WebEngine.
+The accompanying SHA256SUMS covers the tarball and the application. The
+source-revision.txt shipped in the bundle identifies the exact base build.
+https://github.com/joomengine/joomengine/releases
+
+To build with changed libraries, extract the sources, rebuild the Qt WebEngine
+base from its manifest using flatpak-builder, then rebuild the JoomEngine
+manifest in this directory against that base. JoomEngine's own C++ source
+and packaging files are available under Apache-2.0.

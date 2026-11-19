@@ -1,0 +1,61 @@
+name: Microsoft Store submission
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit the certified listing's package update
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'
+    runs-on: windows-2022
+    environment: distribution
+    concurrency:
+      group: microsoft-store-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: microsoft-store-submission
+          path: submission
+      - name: Install Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+        with:
+          version: v0.4.4
+      - name: Authenticate to Partner Center
+        shell: pwsh
+        env:
+          STORE_TENANT_ID: ${{ secrets.MICROSOFT_STORE_TENANT_ID }}
+          STORE_SELLER_ID: ${{ secrets.MICROSOFT_STORE_SELLER_ID }}
+          STORE_CLIENT_ID: ${{ secrets.MICROSOFT_STORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.MICROSOFT_STORE_CLIENT_SECRET }}
+        run: |
+          foreach ($name in 'STORE_TENANT_ID','STORE_SELLER_ID','STORE_CLIENT_ID','STORE_CLIENT_SECRET') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Missing $name in the distribution environment. See docs/publishing-microsoft.md."
+            }
+          }
+          msstore reconfigure --tenantId $env:STORE_TENANT_ID --sellerId $env:STORE_SELLER_ID --clientId $env:STORE_CLIENT_ID --clientSecret $env:STORE_CLIENT_SECRET
+      - name: Upload and submit the versioned release for certification
+        shell: pwsh
+        env:
+          STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
+          EXPECTED_NAME: ${{ vars.MICROSOFT_STORE_PACKAGE_NAME }}
+          MSSTORE_OUTPUT_STREAM: stderr
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:STORE_PRODUCT_ID)) { throw 'Set MICROSOFT_STORE_PRODUCT_ID.' }
+          $response = msstore apps get $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the Microsoft Store listing.' }
+          $app = $response | Out-String | ConvertFrom-Json
+          if ($app.Id -ne $env:STORE_PRODUCT_ID -or $app.PackageIdentityName -ne $env:EXPECTED_NAME) {
+            throw 'The product ID and reserved package identity refer to different apps.'
+          }
+          if (-not $app.LastPublishedApplicationSubmission.Id) { throw 'Complete the first publication in Partner Center.' }
+          if ($app.PendingApplicationSubmission.Id) {
+            throw 'Partner Center already has an open submission. Finish or withdraw it before retrying this release.'
+          }
+          $packages = @(Get-ChildItem submission -Filter *.msixupload -File)
+          if ($packages.Count -ne 1) { throw 'Expected exactly one registered Microsoft Store package.' }
+          msstore publish $packages[0].FullName --appId $env:STORE_PRODUCT_ID
