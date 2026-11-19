@@ -1,6 +1,6 @@
 # JoomEngine documentation
 
-Download JoomEngine from the [latest stable release](https://github.com/joomengine/joomengine/releases/latest). If a package first appeared after that release, choose a [preview build](https://github.com/joomengine/joomengine/releases?q=continuous-&expanded=true). Expand **Assets** to see the downloads.
+Open the [latest stable release](https://github.com/joomengine/joomengine/releases/latest), or choose the version you want from [all releases](https://github.com/joomengine/joomengine/releases). Select your platform in that release's download table or expand **Assets**. Save your package and its `SHA256SUMS` together in a new folder, then follow the guide below. [Verify your download](install-verify.md) · [Preview builds](https://github.com/joomengine/joomengine/releases?q=continuous-&expanded=true)
 
 ## Install on your computer
 

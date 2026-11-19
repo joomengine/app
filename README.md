@@ -4,7 +4,7 @@ JoomEngine brings [JoomEngine Playground](https://playground.joomengine.org/) to
 
 **[Download JoomEngine](https://github.com/joomengine/joomengine/releases/latest)** · **[Installation guides](docs/README.md)**
 
-Open **Assets** on the release and choose the file for your computer. New package formats appear first in [preview builds](https://github.com/joomengine/joomengine/releases?q=continuous-&expanded=true).
+On the release page, choose your computer in the download table, or expand **Assets** and select the matching file. Save it and `SHA256SUMS` from the same release in a new folder. All public release files download in your browser. [All tagged releases](https://github.com/joomengine/joomengine/releases) · [Preview builds](https://github.com/joomengine/joomengine/releases?q=continuous-&expanded=true)
 
 | Your computer | Download and install |
 | --- | --- |

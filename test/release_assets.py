@@ -54,19 +54,25 @@ class ReleaseAssets(unittest.TestCase):
                 VERIFY("local/project", "test", self.output)
 
     def test_release_notes_link_to_the_actual_downloads_and_guides(self):
-        tag = "continuous-123456789abc"
         repo = "joomengine/joomengine"
-        env = dict(os.environ, GITHUB_REPOSITORY=repo, GITHUB_SHA="test-commit", GITHUB_RUN_ID="1")
-        body = subprocess.check_output([sys.executable, ROOT / "scripts/release_notes.py", tag], env=env, text=True)
-        targets = re.findall(r"\]\((https://[^)]+)\)", body)
-        downloads = f"https://github.com/{repo}/releases/download/{tag}/"
-        linked_files = {url.removeprefix(downloads) for url in targets if url.startswith(downloads)}
-        packages = {name for artifact, name in self.names.items() if artifact != "linux-flatpak-source"}
-        self.assertEqual(linked_files, packages | {"SHA256SUMS"})
-        guides = f"https://github.com/{repo}/blob/test-commit/"
-        for url in targets:
-            if url.startswith(guides):
-                self.assertTrue((ROOT / url.removeprefix(guides)).is_file(), url)
+        commit = "123456789abcdef0123456789abcdef012345678"
+        env = dict(os.environ, GITHUB_REPOSITORY=repo, GITHUB_SHA=commit, GITHUB_RUN_ID="1")
+        cases = [(f"v{self.version}", f"refs/tags/v{self.version}"), (f"continuous-{commit[:12]}", "refs/heads/main")]
+        for tag, ref in cases:
+            with self.subTest(tag=tag):
+                body = subprocess.check_output([sys.executable, ROOT / "scripts/release_notes.py", tag], env=env, text=True)
+                targets = re.findall(r"\]\((https://[^)]+)\)", body)
+                downloads = f"https://github.com/{repo}/releases/download/{tag}/"
+                linked_files = {url.removeprefix(downloads) for url in targets if url.startswith(downloads)}
+                packages = {name for artifact, name in self.names.items() if artifact != "linux-flatpak-source"}
+                self.assertEqual(linked_files, packages | {"SHA256SUMS"})
+                self.assertIn(f"https://github.com/{repo}/attestations", targets)
+                self.assertIn(f"gh attestation verify SHA256SUMS --repo {repo} --signer-workflow "
+                              f"{repo}/.github/workflows/desktop.yml --source-ref {ref} --source-digest {commit}", body)
+                guides = f"https://github.com/{repo}/blob/{commit}/"
+                for url in targets:
+                    if url.startswith(guides):
+                        self.assertTrue((ROOT / url.removeprefix(guides)).is_file(), url)
 
     def test_reject_an_extra_file_in_a_release_artifact(self):
         (self.inputs / "linux-archive" / "debug.tar.gz").touch()

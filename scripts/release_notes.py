@@ -28,15 +28,23 @@ def notes(version, tag, repo, commit, run):
         ("Linux AppImage", file("linux-appimage", "AppImage"), "install-appimage.md"),
         ("Ubuntu 26.04 native archive", file("linux-archive", "Linux archive"), "install-linux-archive.md"),
     )
-    kind = "Preview" if tag.startswith("continuous-") else "Stable release"
+    preview = tag.startswith("continuous-")
+    kind = "Preview" if preview else "Stable release"
+    source_ref = "refs/heads/main" if preview else f"refs/tags/{tag}"
     lines = [
-        f"{kind} of JoomEngine {version}. Download the file for your computer.",
+        f"{kind} of JoomEngine {version}. Download your package and install it directly using the guide for your computer.",
         "", "| Your computer | Download | Installation guide |", "| --- | --- | --- |",
     ]
     for platform, link, guide in options:
         lines.append(f"| {platform} | {link} | [How to install]({docs}/{guide}) |")
     lines += [
         "", f"[SHA-256 checksums]({assets}/SHA256SUMS) · [How to verify a download]({docs}/install-verify.md) · [All guides]({docs}/README.md)",
+        "", "To verify the GitHub build signature, download `SHA256SUMS` and run this command in its folder. "
+        "Then check your installer against the verified manifest using the guide above.",
+        "", "```sh",
+        f"gh attestation verify SHA256SUMS --repo {repo} --signer-workflow {repo}/.github/workflows/desktop.yml "
+        f"--source-ref {source_ref} --source-digest {commit}", "```",
+        "", f"[Browse the signed attestations]({base}/attestations)",
         "", f"The {file('linux-snap', 'raw Snap')} and corresponding Qt source archives are also available under **Assets**.",
         "", f"[Source commit]({base}/commit/{commit}) · [Build and test results]({base}/actions/runs/{run})",
     ]

@@ -1,24 +1,33 @@
-# Publish JoomEngine to distribution channels
+# Publish JoomEngine
 
-Every successful main build and version-tag build publishes its downloads to GitHub Releases. People can install them directly without a store account. To make stable updates available through a store or a package manager, choose a channel below, configure its credentials, then start a stable release from the website or terminal. [Release procedure](releases.md) · [Manual installation](README.md#install-on-your-computer)
+GitHub Releases is the project's download page. Each successful main build publishes a preview. Each successful version-tag build publishes the verified installers and their SHA-256 checksums. This includes the Debian, Fedora, Arch, Flatpak, Snap, AppImage and Linux archive downloads. [Create a release](releases.md) · [Install JoomEngine](README.md#install-on-your-computer)
 
-Choose one way to enter your settings. **[GitHub website](#github-website-setup)** uses your existing browser login. **[GitHub CLI](#github-cli-setup)** sets the same names from an authenticated terminal. The channel guides give separate instructions for both. Provider enrollment and approval apply whichever method you choose.
+## Official Linux archives and Flathub
 
-| Channel | GitHub website | Authenticated terminal | What gets published |
+| Destination | How a stable version gets there |
+| --- | --- |
+| [Debian archive](publishing-linux.md#debian-archive) | A Debian maintainer prepares a source package for unstable and arranges a sponsored upload if needed. Debian reviews new packages for archive admission. |
+| [Fedora Linux](publishing-linux.md#fedora-linux) | Submit the spec and source RPM for Fedora package review. After approval, the Fedora maintainer builds it in Koji and submits updates for supported Fedora releases. |
+| [Arch Linux extra](publishing-linux.md#arch-linux-extra) | An Arch Package Maintainer must agree to maintain the package and bring it into the official repository. The guide links to the package search, maintainer list and inclusion criteria. |
+| [Flathub](publishing-linux.md#flatpak-and-flathub) | Submit the Flatpak app to Flathub for review. After acceptance, its app repository controls builds and publication. |
+
+These routes use the destination's own review and publishing infrastructure. There are no GitHub Actions secrets or switches to configure for them in this repository.
+
+## Channels configured in GitHub
+
+The website and authenticated CLI instructions set the same values. Complete the provider enrollment steps in the channel guide first. [GitHub website setup](#github-website-setup) · [GitHub CLI setup](#github-cli-setup)
+
+| Channel | GitHub website | Authenticated terminal | Release outcome |
 | --- | --- | --- | --- |
-| GitHub Releases | [Start a release in Actions](releases.md#from-the-github-website) | [Start a release with `gh`](releases.md#from-an-authenticated-terminal) | All verified packages and SHA-256 checksums, using the built-in Actions token. |
-| Snap Store | [Export and paste the Snap credential](publishing-linux.md#snap-store) | [Send the Snap credential with `gh`](publishing-linux.md#snap-store-from-the-command-line) | A candidate is installed and tested on a clean system before promotion to stable. |
-| Debian APT and Fedora DNF | [Enter the Cloudsmith settings](publishing-linux.md#debian-apt-and-fedora-rpm) | [Set up APT and RPM with `gh`](publishing-linux.md#debian-and-fedora-from-the-command-line) | The GitHub binaries go to your signed package repository. [Official distribution archives](publishing-linux.md#official-distribution-archives) have their own admission process. |
-| Arch User Repository | [Enter the AUR settings](publishing-linux.md#arch-user-repository) | [Configure AUR with `gh`](publishing-linux.md#aur-from-the-command-line) | The source recipe and package metadata go to AUR. Users can also download the binary from GitHub. |
-| macOS | [Enter signing and notarization settings](publishing-apple.md#configure-github-actions-in-the-browser) | [Configure Apple signing with `gh`](publishing-apple.md#configure-github-actions-with-the-cli) | Signed, notarized DMGs for Apple silicon and Intel when configured. [Mac App Store eligibility](publishing-apple.md#mac-app-store-eligibility) |
-| Windows and Microsoft Store | [Set up Partner Center](publishing-microsoft.md#reserve-the-microsoft-store-identity) · [Sign direct downloads](publishing-microsoft.md#sign-github-downloads-for-windows) | [Configure signing and Store updates with PowerShell and `gh`](publishing-microsoft.md#configure-github-actions-from-powershell) | Portable ZIP and MSIX on GitHub, plus optional updates to a published Microsoft Store listing. |
-
-The standalone Flatpak bundle, AppImage and Linux archive are included in GitHub Releases automatically. For an external listing, follow the provider's submission process. [Flathub](publishing-linux.md#flatpak-and-flathub) · [AppImageHub](publishing-linux.md#appimagehub-and-the-linux-archive)
+| GitHub Releases | [Start a release in Actions](releases.md#from-the-github-website) | [Start a release with `gh`](releases.md#from-an-authenticated-terminal) | Publishes all downloads with signed build provenance. [Release signing](releases.md#signatures-for-github-downloads) · [Immutable release signatures](releases.md#github-signatures-for-the-release-itself) |
+| Canonical Snap Store | [Export and paste the credential](publishing-linux.md#snap-store) | [Send the credential with `gh`](publishing-linux.md#snap-store-from-the-command-line) | Installs and tests the Store candidate on a clean system before promoting it to stable. |
+| Apple Developer ID | [Enter signing and notarization settings](publishing-apple.md#configure-github-actions-in-the-browser) | [Configure Apple signing with `gh`](publishing-apple.md#configure-github-actions-with-the-cli) | Signs and notarizes the Intel and Apple silicon DMGs for direct download. [Mac App Store eligibility](publishing-apple.md#mac-app-store-eligibility) |
+| Microsoft Store | [Set up Partner Center](publishing-microsoft.md#reserve-the-microsoft-store-identity) | [Configure Store updates with PowerShell and `gh`](publishing-microsoft.md#prepare-the-first-microsoft-store-submission) | Submits updates to an existing Store listing for certification. The GitHub ZIP and MSIX have their own [browser](publishing-microsoft.md#sign-github-downloads-for-windows) and [PowerShell](publishing-microsoft.md#sign-the-direct-downloads) signing instructions. |
 
 ## GitHub website setup
 
 1. For channel flags and public Store identity metadata, open [Settings → Secrets and variables → Actions → Variables](https://github.com/joomengine/joomengine/settings/variables/actions) and choose **New repository variable**. Set the channel's flag to the literal `true` after completing its setup.
-2. For Linux and Microsoft publisher credentials, open [Settings → Environments](https://github.com/joomengine/joomengine/settings/environments), create the environment named `distribution`, then open it. Use **Environment secrets** or **Environment variables** exactly as the channel guide specifies. Deployment branch and tag rules must permit your stable `v*` tags.
+2. For Snap Store and Microsoft Store credentials, open [Settings → Environments](https://github.com/joomengine/joomengine/settings/environments), create the environment named `distribution`, then open it. Add each credential under **Environment secrets** using the exact name from its channel guide. Deployment branch and tag rules must permit your stable `v*` tags.
 3. Direct-download Windows signing and Apple signing/notarization use the existing [repository Actions secrets](https://github.com/joomengine/joomengine/settings/secrets/actions). The platform guides explain where to obtain each value, its encoding and where it goes.
 
 ## GitHub CLI setup
@@ -30,7 +39,7 @@ gh auth status --hostname github.com
 gh api --paginate 'repos/joomengine/joomengine/environments?per_page=100' --jq '.environments[].name'
 ```
 
-If `distribution` is absent from a successful listing, create it and allow stable version tags. For an existing environment, keep its current approval and deployment rules. If it uses selected deployment tags, check that the intended version is allowed.
+For Snap Store or Microsoft Store publishing, if `distribution` is absent from a successful listing, create it and allow stable version tags. For an existing environment, keep its current approval and deployment rules. If it uses selected deployment tags, check that the intended version is allowed.
 
 ```sh
 echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' | gh api --method PUT repos/joomengine/joomengine/environments/distribution --input - --silent
@@ -41,7 +50,6 @@ Next, use the **GitHub CLI** steps in the appropriate channel guide. Those comma
 
 ```sh
 gh secret list --repo joomengine/joomengine --env distribution
-gh variable list --repo joomengine/joomengine --env distribution --json name --jq '.[].name'
 gh secret list --repo joomengine/joomengine
 gh variable list --repo joomengine/joomengine --json name --jq '.[].name'
 ```

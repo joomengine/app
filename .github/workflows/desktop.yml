@@ -92,11 +92,13 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: ${{ runner.temp }}/inputs
       - name: Verify the same packages and the pinned upstream Qt source
@@ -107,7 +109,18 @@ jobs:
           cmp "$inputs/download-checksums/SHA256SUMS" "$downloads/SHA256SUMS"
           python3 scripts/package-qt-notices.py --source-only "$downloads"
           (cd "$downloads" && sha256sum --check --strict SHA256SUMS)
+      - name: Prepare the draft or verify the existing public release
+        id: publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/publish-release.sh --prepare-for-signing "$RUNNER_TEMP/downloads"
+      - name: Sign provenance for every release file, including SHA256SUMS
+        if: steps.publication.outputs.publish == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: '${{ runner.temp }}/downloads/*'
       - name: Publish the complete release and installation guide
+        if: steps.publication.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/publish-release.sh "$RUNNER_TEMP/downloads"
@@ -119,7 +132,12 @@ jobs:
     secrets: inherit
 
   microsoft-store:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      ((vars.MICROSOFT_STORE_PACKAGE_NAME != '' && vars.MICROSOFT_STORE_PACKAGE_PUBLISHER != '' &&
+      vars.MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME != '') ||
+      (startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'))
     needs: release
     uses: ./.github/workflows/microsoft-store.yml
     secrets: inherit
