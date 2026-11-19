@@ -114,6 +114,7 @@
     });
   }
   async function fetchRepositoryCatalog() {
+    signal('progress', 'Loading the network transport and fetching the external GitHub catalog.');
     // Use the same hosted HTTP transport as PHP cURL and extension downloads.
     // Checking a pinned file digest excludes an HTML error page or shell copy.
     const { networkFetch } = await import(new URL('/src/network-transport.mjs', location.origin).href);
