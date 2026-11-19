@@ -50,8 +50,11 @@ try {
     # Use a shared download destination outside MSIX's redirected AppData.
     $env:TEMP = $env:RUNNER_TEMP
     $env:TMP = $env:RUNNER_TEMP
-    & node (Join-Path $PSScriptRoot '../../test/smoke.cjs') $executable
+    $smoke = Join-Path $PSScriptRoot '../../test/smoke.cjs'
+    & node $smoke $executable
     if ($LASTEXITCODE) { throw "Packaged application smoke test failed ($LASTEXITCODE)." }
+    & node $smoke $executable --live
+    if ($LASTEXITCODE) { throw "Live JCB deployment, database and export test failed ($LASTEXITCODE)." }
 } finally {
     if ($installed) { Remove-AppxPackage -Package $installed.PackageFullName }
     if ($cert) {

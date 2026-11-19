@@ -44,7 +44,7 @@ The fixture test uses OpenSSL to create a temporary loopback certificate. The li
 
 ## Releases
 
-Set the numeric version in `package.json` and update the lockfile. A matching `vMAJOR.MINOR.PATCH` tag builds the packages, runs the installed-app tests and publishes the artifacts with SHA-256 checksums. Linux also runs the live JCB check. Pin updates to Electron in `config.electronVersion` so candidate runtimes go through the same tests.
+Set the numeric version in `package.json` and update the lockfile. A matching `vMAJOR.MINOR.PATCH` tag builds the packages, runs the installed-app tests and publishes the artifacts with SHA-256 checksums. Each installed package also runs the live JCB check. Pin updates to Electron in `config.electronVersion` so candidate runtimes go through the same tests.
 
 For signed Windows releases, set the repository variable `WINDOWS_PUBLISHER` to the certificate subject, and set the secrets `WINDOWS_PFX_BASE64` and `WINDOWS_PFX_PASSWORD`. For signed macOS releases, set `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD` and `APPLE_SIGNING_IDENTITY`. Add `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_SPECIFIC_PASSWORD` for notarization. These signing credentials are used only for version tags. To also publish the tested Snap to a registered Snap Store listing, set `SNAP_STORE_PUBLISH` to `true` and supply `SNAPCRAFT_STORE_CREDENTIALS`. Store auto-connection of the browser sandbox requires approval for that interface.
 
