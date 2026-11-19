@@ -14,6 +14,10 @@ mkdir -p "$work/source" "$root/dist/packages" "$root/dist/flatpak-source"
 git -C "$root" archive HEAD | tar -x -C "$work/source"
 cd "$work"
 manifest="$work/source/packaging/flatpak/$app.json"
+# The compiler and base app go into a separate installation. Launch tests
+# below use the ordinary user's installation, as on a new desktop.
+export FLATPAK_USER_DIR
+FLATPAK_USER_DIR=$(mktemp -d "$work/sdk-installation.XXXXXX")
 flatpak remote-add --user --if-not-exists flathub "$flathub"
 flatpak install --user --noninteractive --assumeyes flathub \
   "org.kde.Platform//$branch" "org.kde.Sdk//$branch" "$base//$branch"
@@ -22,7 +26,7 @@ flatpak install --user --noninteractive --assumeyes --no-deps --no-related flath
 
 # Flathub records the upstream Git revision in the subject of both OSTree
 # commits. A mirror update between downloads must never pair unrelated builds.
-repo="${XDG_DATA_HOME:-$HOME/.local/share}/flatpak/repo"
+repo="$FLATPAK_USER_DIR/repo"
 base_commit=$(flatpak info --user --show-commit "$base//$branch")
 source_commit=$(flatpak info --user --show-commit "$base.Sources//$branch")
 revision() {
@@ -55,9 +59,21 @@ build "$manifest"
 version=$(cat "$root/VERSION")
 flatpak build-bundle --arch="$arch" --runtime-repo="$flathub" "$work/repo" \
   "$root/dist/packages/JoomEngine-$version-$arch.flatpak" "$app" stable
-flatpak install --user --noninteractive --assumeyes --bundle "$root/dist/packages/JoomEngine-$version-$arch.flatpak"
 # Only the production bundle goes into dist. The instrumented build uses
 # the same sandbox, runtime, finish arguments and source revision.
 build "$work/source/packaging/flatpak/qa.json"
+# All deliverables now live outside this disposable SDK installation. Free
+# space before Flatpak provisions the end user's runtime from the bundle.
+rm -rf -- "$FLATPAK_USER_DIR"
+unset FLATPAK_USER_DIR
+# A single command must discover Flathub, install the KDE runtime and put
+# JoomEngine in the app menu. There is no manual remote-add for this install.
+if [[ -n $(flatpak remotes --user --columns=name) ]] || flatpak info "org.kde.Platform//$branch" >/dev/null 2>&1; then
+  echo "The clean-install check needs a user with no Flatpak remotes or installed KDE runtime." >&2
+  exit 1
+fi
+flatpak install --user --noninteractive --assumeyes "$root/dist/packages/JoomEngine-$version-$arch.flatpak"
+flatpak info --user "org.kde.Platform//$branch"
+flatpak info --user "$app//stable"
 flatpak remote-add --user --if-not-exists --no-gpg-verify joomengine-ci "$work/repo"
 flatpak install --user --noninteractive --assumeyes joomengine-ci "$app//qa"

@@ -1,24 +1,14 @@
-# JoomEngine archive for Ubuntu 26.04
+# Install the JoomEngine archive on Ubuntu 26.04
 
-This x86-64 build runs against Ubuntu 26.04's system Qt WebEngine. Download the file ending in `-linux-x64.tar.gz` and `SHA256SUMS` from the same [JoomEngine release](https://github.com/joomengine/joomengine/releases). [Verify the package](https://github.com/joomengine/joomengine/blob/main/docs/install-verify.md#linux).
+1. Download the file ending in `-linux-x64.tar.gz` from the [JoomEngine releases](https://github.com/joomengine/joomengine/releases).
+2. Extract the archive, open a terminal in the extracted directory and run the installer.
 
-Install the runtime and installer dependencies, extract the archive and install the desktop launcher for your user account.
+   ```sh
+   ./install.sh
+   ```
 
-```sh
-sudo apt update
-sudo apt install libqt6webenginewidgets6 libqt6webenginecore6-bin qt6-qpa-plugins python3
-tar -xzf JoomEngine-*-linux-x64.tar.gz
-cd JoomEngine-*-linux-x64
-./install.sh
-```
+3. Open **JoomEngine** from the applications menu or run `~/.local/bin/joomengine`.
 
-Launch **JoomEngine** from your application menu or run `~/.local/bin/joomengine`. You can also run `./joomengine` directly from the extracted directory. Connect to the internet to load Playground.
+This package uses Ubuntu 26.04's Qt WebEngine and Python 3. It installs in your user account. To update, quit the app and repeat the installation with the new archive.
 
-To update, close JoomEngine and repeat these steps with the new archive. To remove the launcher, executable, icon and license files while keeping your local Playground profile, run the following.
-
-```sh
-share="${XDG_DATA_HOME:-$HOME/.local/share}"
-rm -f "$HOME/.local/bin/joomengine" "$share/applications/org.joomengine.app.desktop" \
-    "$share/icons/hicolor/512x512/apps/joomengine.png"
-rm -rf "$share/joomengine/licenses"
-```
+[Runtime packages and removal](https://github.com/joomengine/joomengine/blob/main/docs/troubleshooting.md#ubuntu-archive-runtime-and-removal) · [Check the download](https://github.com/joomengine/joomengine/blob/main/docs/install-verify.md#linux) · [All installation guides](https://github.com/joomengine/joomengine/blob/main/docs/README.md)

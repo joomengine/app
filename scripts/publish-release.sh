@@ -9,13 +9,11 @@ if [[ $GITHUB_REF == refs/heads/main ]]; then
   title="JoomEngine $version preview ($tag)"
   create_options=(--target "$commit" --prerelease --latest=false)
   edit_options=(--latest=false)
-  channel="Preview from the main branch."
 elif [[ $GITHUB_REF == "refs/tags/v$version" ]]; then
   tag="v$version"
   title="JoomEngine $version"
   create_options=(--verify-tag)
   edit_options=()
-  channel="Stable release."
 else
   echo "Unsupported release ref: $GITHUB_REF" >&2
   exit 1
@@ -25,19 +23,7 @@ dir=$(realpath "$1")
 notes=$(mktemp)
 existing=$(mktemp)
 trap 'rm -f "$notes" "$existing"' EXIT
-cat > "$notes" <<NOTES
-$channel Built from [commit ${commit:0:12}](https://github.com/$repo/commit/$commit).
-
-Download one package for your platform and \`SHA256SUMS\` from **Assets**. The Qt source archives are separate downloads for developers.
-
-| Platform | Package and installation |
-| --- | --- |
-| Linux x86-64 | [Debian 13, Arch, Fedora 44, AppImage, Flatpak, Snap or Ubuntu archive](https://github.com/$repo/blob/$commit/docs/install-linux.md) |
-| Windows x64 | [Extract the portable ZIP and run JoomEngine.exe, or install a trusted signed MSIX](https://github.com/$repo/blob/$commit/docs/install-windows.md) |
-| macOS | [Choose the Apple silicon or Intel DMG and drag JoomEngine to Applications](https://github.com/$repo/blob/$commit/docs/install-macos.md) |
-
-[Verify your download](https://github.com/$repo/blob/$commit/docs/install-verify.md) · [Build and test results](https://github.com/$repo/actions/runs/$GITHUB_RUN_ID)
-NOTES
+python3 scripts/release_notes.py "$tag" > "$notes"
 
 if gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft > "$existing"; then
   if [[ $(cat "$existing") == false ]]; then

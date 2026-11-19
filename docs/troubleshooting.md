@@ -1,4 +1,4 @@
-# Troubleshoot desktop display issues
+# JoomEngine troubleshooting
 
 ## A blank strip or a flickering page
 
@@ -39,3 +39,35 @@ Try the same page and action in an ordinary browser at [JoomEngine Playground](h
    ```
 
 4. Include the Qt and Chromium graphics device/renderer lines, the first occurrence of the warning and the actions immediately preceding it. Review the excerpt for local paths, project names and private URLs. [Qt WebEngine graphics diagnostics](https://doc.qt.io/qt-6/qtwebengine-features.html#hardware-acceleration) · [Open a JoomEngine issue](https://github.com/joomengine/joomengine/issues)
+
+## Snap installed with a warning
+
+`joomengine 0.1.0 installed` confirms that installation succeeded. If snapd prints `WARNING: There is 1 new warning. See 'snap warnings'.`, run `snap warnings` to read the message. To check the installed revision, run `snap list joomengine`. For a startup problem, also collect [the Linux report](#gather-a-linux-report).
+
+## Updating a Flatpak bundle
+
+Quit JoomEngine. In the directory containing the new download, run `flatpak install --reinstall ./JoomEngine-*-x86_64.flatpak`. If you originally chose a per-user installation, add `--user`. Flatpak obtains the required runtime from the repository referenced by the bundle and may ask to add it. To configure Flathub for a distribution where it is unavailable, follow the [Flatpak setup guide](https://flatpak.org/setup/). [Flatpak single-file bundles](https://docs.flatpak.org/en/latest/single-file-bundles.html)
+
+## AppImage portable use
+
+On a desktop that permits Chromium user namespaces, make the downloaded AppImage executable and double-click it to run it without installing. If FUSE is unavailable, launch it with `--appimage-extract-and-run`. On Ubuntu with restricted user namespaces, use the [built-in installer](install-appimage.md). It copies the app to `/opt/joomengine/JoomEngine.AppImage`, creates the launcher, and loads an AppArmor profile scoped to that location. [AppImage FUSE troubleshooting](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)
+
+## Ubuntu archive runtime and removal
+
+If the archive fails to launch because a Qt library or browser helper is missing, install its dependencies on Ubuntu 26.04.
+
+```sh
+sudo apt update
+sudo apt install libqt6webenginewidgets6 libqt6webenginecore6-bin qt6-qpa-plugins python3
+```
+
+To remove the archive's launcher, executable, icon and license files while keeping your local Playground profile, run the following commands.
+
+```sh
+share="${XDG_DATA_HOME:-$HOME/.local/share}"
+rm -f "$HOME/.local/bin/joomengine" "$share/applications/org.joomengine.app.desktop" \
+    "$share/icons/hicolor/512x512/apps/joomengine.png"
+rm -rf "$share/joomengine/licenses"
+```
+
+[All JoomEngine guides](README.md)

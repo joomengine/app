@@ -9,3 +9,5 @@ The DMGs target macOS 13 Ventura and later. [Qt for macOS](https://doc.qt.io/qt-
 A release signed with Developer ID and notarized by Apple uses the normal macOS first-open confirmation. Preview builds may have an ad hoc signature. If macOS reports that it cannot verify the developer of a preview you intentionally downloaded and verified, first try opening the app, then use **System Settings → Privacy & Security → Open Anyway** for JoomEngine. Your administrator may restrict this option. Apple's guidance distinguishes that message from an alert about malware or a damaged application. [Apple's guide to opening downloaded apps](https://support.apple.com/en-us/102445)
 
 To update, quit JoomEngine and replace the copy in Applications with the one from the newer, verified DMG. Use Playground's **Download** action to make a portable backup before moving to another Mac.
+
+[All JoomEngine guides](README.md)

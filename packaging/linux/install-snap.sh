@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
     command -v sudo >/dev/null || fail "Run this installer as an administrator, or install sudo."
     admin=(sudo)
 fi
-timeout 10m snap wait system seed.loaded || fail "snapd has not finished seeding. Check systemctl status snapd and retry."
+"${admin[@]}" timeout 10m snap wait system seed.loaded || fail "Could not wait for snapd to finish seeding. Check systemctl status snapd and retry."
 
 # Providing the dependencies first also supports an unsigned local installation
 # on a distribution which does not automatically install local file providers.
