@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleExecutable</key><string>JoomEngine</string>
-  <key>CFBundleIdentifier</key><string>org.joomengine.app</string>
+  <key>CFBundleIdentifier</key><string>${JOOMENGINE_MAC_BUNDLE_ID}</string>
   <key>CFBundleDisplayName</key><string>JoomEngine</string>
   <key>CFBundleName</key><string>JoomEngine</string>
   <key>CFBundlePackageType</key><string>APPL</string>

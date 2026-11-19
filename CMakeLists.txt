@@ -35,6 +35,13 @@ elseif(APPLE)
     set(CMAKE_OBJCXX_STANDARD 17)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
+    set(JOOMENGINE_MAC_BUNDLE_ID org.joomengine.app)
+    if(JOOMENGINE_NATIVE_QA)
+        # Preserve the default WebKit store across both test launches and
+        # isolate it from the production app. Reconfigure for a fresh test.
+        string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef qa_suffix)
+        set(JOOMENGINE_MAC_BUNDLE_ID "org.joomengine.app.qa.${qa_suffix}")
+    endif()
     set(mac_resources assets/joomengine.icns LICENSE NOTICE LICENSES/CHOC-ISC.txt)
     set_source_files_properties(${mac_resources} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     add_executable(joomengine MACOSX_BUNDLE src/macos.mm ${mac_resources})

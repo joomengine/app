@@ -61,13 +61,13 @@ def exercise(binary, work, identifier, write):
             if write and not gate.exists() and exported(bundle):
                 print('Verified the delivered ZIP, Joomla configuration, SQL and export metadata.', flush=True)
                 gate.touch()
+            status = process.poll()
             lines = []
             if log.exists():
                 lines = log.read_text(encoding='utf-8', errors='replace').splitlines()
                 for line in lines[lines_seen:]:
                     print(line, flush=True)
                 lines_seen = len(lines)
-            status = process.poll()
             if status is not None:
                 if status or not any(line.startswith('pass ') for line in lines):
                     raise RuntimeError(f'Native {mode} check exited with status {status} before the pass signal.')
