@@ -1,0 +1,5 @@
+joomengine (@VERSION@-1) trixie; urgency=medium
+
+  * Package the upstream JoomEngine desktop release.
+
+ -- JoomEngine contributors <joomengine@users.noreply.github.com>  @DATE@

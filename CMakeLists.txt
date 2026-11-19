@@ -56,3 +56,21 @@ if(JOOMENGINE_NATIVE_QA)
     target_compile_definitions(joomengine PRIVATE JOOMENGINE_NATIVE_QA=1)
     target_include_directories(joomengine PRIVATE test)
 endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT JOOMENGINE_NATIVE_QA)
+    include(GNUInstallDirs)
+    install(TARGETS joomengine RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    # Use the application ID for desktop exports, including Flatpak's launcher.
+    set(desktop_entry "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/joomengine.desktop")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${desktop_entry}")
+    file(READ "${desktop_entry}" desktop_contents)
+    string(REPLACE "Icon=joomengine\n" "Icon=org.joomengine.app\n" desktop_contents "${desktop_contents}")
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/org.joomengine.app.desktop" CONTENT "${desktop_contents}")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/org.joomengine.app.desktop"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+    install(FILES assets/joomengine.png DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps"
+            RENAME org.joomengine.app.png)
+    install(FILES packaging/flatpak/org.joomengine.app.metainfo.xml DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo")
+    install(FILES LICENSE NOTICE DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/joomengine")
+    install(DIRECTORY LICENSES DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/joomengine")
+endif()

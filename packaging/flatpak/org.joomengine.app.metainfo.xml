@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.joomengine.app</id>
+  <name>JoomEngine</name>
+  <summary>Build Joomla extensions with JoomEngine Playground</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <developer id="org.joomengine"><name>JoomEngine contributors</name></developer>
+  <description>
+    <p>Open Joomla Component Builder in a dedicated desktop window. JoomEngine
+    loads the hosted Playground and stores your workspaces on this computer.
+    Open Adminer in a separate window, export a complete site, and return to
+    your saved files and database after closing the app.</p>
+  </description>
+  <launchable type="desktop-id">org.joomengine.app.desktop</launchable>
+  <url type="homepage">https://playground.joomengine.org/</url>
+  <url type="bugtracker">https://github.com/joomengine/joomengine/issues</url>
+  <url type="vcs-browser">https://github.com/joomengine/joomengine</url>
+  <content_rating type="oars-1.1"/>
+</component>

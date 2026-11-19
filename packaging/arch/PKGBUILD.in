@@ -1,0 +1,22 @@
+pkgname=joomengine
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Native desktop workspace for JoomEngine Playground and Joomla Component Builder'
+arch=('x86_64')
+url='https://github.com/joomengine/joomengine'
+license=('Apache-2.0')
+depends=('gcc-libs' 'glibc' 'qt6-base' 'qt6-webengine')
+makedepends=('cmake')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('@SHA256@')
+# Publish a single release package. The source does not ship separate debug symbols.
+options=('!debug')
+
+build() {
+    cmake -S "$srcdir/$pkgname-$pkgver" -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
