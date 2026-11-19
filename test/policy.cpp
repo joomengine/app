@@ -8,7 +8,7 @@ int main()
                                  "blob:https://playground.joomengine.org/session-export", "about:blank"}) {
         if (!isWorkspaceURL(internal) || isExternalWebURL(internal)) return 1;
     }
-    for (const auto* other : {"https://api.github.com/repos/joomengine/app", "http://localhost:11434",
+    for (const auto* other : {"https://api.github.com/repos/joomengine/joomengine", "http://localhost:11434",
                               "https://playground.joomengine.org.example.com", "https://playground.joomengine.org:444"}) {
         if (isWorkspaceURL(other) || !isExternalWebURL(other)) return 1;
     }

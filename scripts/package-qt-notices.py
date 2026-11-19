@@ -127,7 +127,7 @@ including optional components. Their paths identify the upstream projects.
 The complete, unmodified source archive, including Chromium, is available
 beside this DMG in the tagged JoomEngine release and from Qt's archive.
 
-https://github.com/joomengine/app/releases/download/v{version}/{SOURCE}
+https://github.com/joomengine/joomengine/releases/download/v{version}/{SOURCE}
 {URL}
 SHA-256  {SHA256}
 

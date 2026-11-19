@@ -7,9 +7,9 @@ description: |
   Run the JCB development workspace on your desktop with persistent sites,
   detached tool windows and project downloads using Qt WebEngine.
 website: https://playground.joomengine.org/
-source-code: https://github.com/joomengine/app
-issues: https://github.com/joomengine/app/issues
-contact: https://github.com/joomengine/app/issues
+source-code: https://github.com/joomengine/joomengine
+issues: https://github.com/joomengine/joomengine/issues
+contact: https://github.com/joomengine/joomengine/issues
 license: Apache-2.0
 grade: stable
 confinement: strict
