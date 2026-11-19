@@ -8,6 +8,53 @@
   };
   const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   const element = id => document.getElementById(id);
+  function safeText(text, limit = 120) {
+    const line = String(text || '').replace(/\s+/g, ' ').trim();
+    if (/password|passwd|credential|secret|api[_-]?key|authorization|cookie|bearer\s|csrf|token|\bselect\b.+\bfrom\b|\b(?:insert|replace)\s+into\b|\bupdate\s+\S+\s+set\b|\b(?:delete\s+from|(?:create|drop|alter)\s+table)\b/i.test(line)) return '[redacted]';
+    return line.replace(/[\w.+-]+@[\w.-]+/g, '[email]').replace(/[A-Za-z0-9_-]{32,}/g, '[id]').slice(0, limit);
+  }
+
+  // restoreResponse() constructs a Response for a PHP worker result. The login
+  // code reads its status and discards the body on HTTP 500. Observe that read
+  // in the QA page only. Keep requests, body streams and status values intact.
+  const errors = [];
+  const observations = [];
+  const observed = new WeakSet();
+  const descriptor = Object.getOwnPropertyDescriptor(Response.prototype, 'status');
+  if (descriptor?.configurable) Object.defineProperty(Response.prototype, 'status', { ...descriptor, get() {
+    const status = descriptor.get.call(this);
+    if (status >= 500 && !this.url && this.body && !this.bodyUsed && !observed.has(this) && errors.length < 3) {
+      observed.add(this);
+      const record = { status };
+      errors.push(record);
+      try {
+        const reader = this.clone().body?.getReader();
+        if (reader) observations.push((async () => {
+          let sample = '';
+          const decoder = new TextDecoder();
+          while (sample.length < 65536) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            sample += decoder.decode(value.subarray(0, 65536 - sample.length), { stream: true });
+          }
+          void reader.cancel().catch(() => {});
+          const title = sample.match(/<title\b[^>]*>([^<>]{1,240})<\/title>/i)?.[1];
+          const heading = sample.match(/<h1\b[^>]*>([^<>]{1,240})<\/h1>/i)?.[1];
+          if (title) record.title = safeText(title);
+          if (heading) record.heading = safeText(heading);
+          // Classify useful error signatures without printing the response, SQL,
+          // headers or connection details—even when PHP returns plain text.
+          record.causes = ['Allowed memory size', 'Maximum execution time', 'failed to open stream',
+            'database is locked', 'database connection', 'access denied', 'table does not exist',
+            'out of memory', 'Class not found', 'unhandled exception', 'fatal error']
+            .filter(term => sample.toLowerCase().includes(term.toLowerCase()));
+          const sqlState = sample.match(/SQLSTATE\[([A-Z0-9]{5})\]/i);
+          if (sqlState) record.sqlState = sqlState[1];
+        })().catch(() => {}));
+      } catch { /* A previously consumed or unavailable response has no diagnostic body. */ }
+    }
+    return status;
+  } });
   function dashboardState() {
     const frame = element('site-frame');
     const state = {
@@ -21,11 +68,11 @@
       const url = new URL(frame.contentWindow.location.href);
       state.route = url.pathname.replace(/(__site\/)[^/]+\/[^/]+/g, '$1…') + (url.searchParams.has('option') ? '?option=' + url.searchParams.get('option') : '');
       state.document = doc?.readyState;
-      state.title = doc?.title?.slice(0, 100);
-      state.headings = [...(doc?.querySelectorAll('h1,h2') || [])].slice(0, 5).map(node => node.textContent.trim().slice(0, 70));
+      state.title = safeText(doc?.title, 100);
+      state.headings = [...(doc?.querySelectorAll('h1,h2') || [])].slice(0, 5).map(node => safeText(node.textContent, 70));
       state.login = Boolean(doc?.querySelector('form#login-form input[name="passwd"],input[autocomplete="current-password"]'));
       state.jcbLinks = doc?.querySelectorAll('a[href*="option=com_componentbuilder"][href*="view="]').length || 0;
-      state.body = doc?.body?.innerText?.trim().replace(/\s+/g, ' ').slice(0, 140);
+      state.body = safeText(doc?.body?.innerText?.slice(0, 250), 140);
     } catch (error) { state.frameError = error.name; }
     return state;
   }
@@ -33,8 +80,8 @@
   const controlledLabel = 'a controlled Playground document';
   function diagnostics() {
     const activity = [...document.querySelectorAll('#activity-log li')].slice(-5)
-      .map(item => item.textContent.trim().slice(0, 105));
-    return JSON.stringify({ ...dashboardState(), details: element('error-diagnostics')?.textContent?.trim().slice(0, 240), activity });
+      .map(item => safeText(item.textContent, 105));
+    return JSON.stringify({ ...dashboardState(), details: safeText(element('error-diagnostics')?.textContent, 240), activity });
   }
   async function until(label, check, milliseconds = 90000) {
     const deadline = Date.now() + milliseconds;
@@ -43,7 +90,7 @@
     while (Date.now() < deadline) {
       try { if (check()) return; } catch (exception) { error = exception.message; }
       const failed = document.querySelector('#error-view:not([hidden]) #error-message')?.textContent?.trim();
-      if (failed) throw Error('Playground reported: ' + failed.slice(0, 260) + ' ' + diagnostics());
+      if (failed) throw Error('Playground reported: ' + safeText(failed, 260) + ' ' + diagnostics());
       if (Date.now() >= nextReport) {
         const message = element('loading-message')?.textContent?.trim() || element('save-state')?.textContent?.trim() || '';
         signal('progress', 'Waiting for ' + label + '. ' + message.slice(0, 160) +
@@ -53,7 +100,7 @@
       await delay(200);
     }
     const feedback = [element('error-message'), element('header-feedback'), element('save-state')]
-      .map(node => node?.textContent?.trim().slice(0, 200)).filter(Boolean).join(' / ');
+      .map(node => safeText(node?.textContent, 200)).filter(Boolean).join(' / ');
     throw Error(label + ' timed out. ' + [error, feedback].filter(Boolean).join(' / ') +
       (label === dashboardLabel || label === controlledLabel ? ' ' + diagnostics() : ''));
   }
@@ -120,7 +167,7 @@
     const answer = new DOMParser().parseFromString(await response.text(), 'text/html');
     if (!response.ok || ![...answer.querySelectorAll('#content td')].some(cell => cell.textContent.trim() === config.id)) {
       const diagnostic = [...answer.querySelectorAll('#content .error, #content .message')].slice(0, 3)
-        .map(node => node.textContent.trim().slice(0, 180)).join(' / ');
+        .map(node => safeText(node.textContent, 180)).join(' / ');
       throw Error('Adminer did not return the saved row (HTTP ' + response.status + '). ' + diagnostic);
     }
   }
@@ -173,5 +220,8 @@
       signal('pass', (config.write ? 'write ' : 'restore ') + attempt);
       await delay(400);
     }
-  } catch (error) { signal('fail', error.message); }
+  } catch (error) {
+    await Promise.race([Promise.allSettled(observations), delay(1000)]);
+    signal('fail', (errors.length ? 'PHP responses ' + JSON.stringify(errors) + '. ' : '') + error.message);
+  }
 })();

@@ -237,7 +237,7 @@ void activate(GtkApplication* app, gpointer) {
     g_signal_connect(view, "notify::title", G_CALLBACK(+[](WebKitWebView* source, GParamSpec*, Window* target) {
         const char* title = webkit_web_view_get_title(source);
         if (title) qa::onTitle(title, [target] { gtk_menu_item_activate(GTK_MENU_ITEM(target->reload)); },
-            [target] { g_application_quit(G_APPLICATION(gtk_window_get_application(GTK_WINDOW(target->shell)))); });
+            [target] { gtk_window_close(GTK_WINDOW(target->shell)); });
     }), owner);
 #endif
     gtk_widget_show_all(owner->shell);

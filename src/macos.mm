@@ -194,12 +194,17 @@ NSURL *workspaceURL() {
         self.closingNavigation = nil;
         [NSApp replyToApplicationShouldTerminate:YES];
     } else {
+#ifdef JOOMENGINE_NATIVE_QA
+        qa::onTitle("JE-QA/" + qa::environment("JOOMENGINE_QA_ID") + "/fail/Native WebKit content process terminated",
+                    [] {}, [] { choc::messageloop::stop(); });
+#else
         NSAlert *alert = [[NSAlert alloc] init];
         alert.messageText = @"The Playground web process stopped";
         alert.informativeText = @"Reload the workspace to reopen the saved site.";
         [alert addButtonWithTitle:@"Reload"]; [alert addButtonWithTitle:@"Close"];
         if ([alert runModal] == NSAlertFirstButtonReturn) [view loadRequest:[NSURLRequest requestWithURL:workspaceURL()]];
         else [view.window close];
+#endif
     }
 }
 
