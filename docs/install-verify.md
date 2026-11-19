@@ -38,3 +38,5 @@ Write-Output "Verified $($file.Name)"
 ```
 
 A matching digest confirms that your download matches the project's release manifest. The operating system separately verifies the publisher signature when installing a signed MSIX or opening a Developer ID-signed, notarized Mac distribution.
+
+[All JoomEngine guides](README.md)

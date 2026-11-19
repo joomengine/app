@@ -27,10 +27,12 @@
 
 ## Release contents and verification
 
-The same run supplies the Windows x64 ZIP and MSIX, Apple silicon and Intel DMGs, and seven x86-64 Linux packages. Linux packages include a native archive, Snap, Debian package, Arch package, Fedora RPM, Flatpak and AppImage. Download dependencies and minimum OS versions are documented in the [installation guides](../README.md#download-and-install).
+The same run supplies the Windows x64 ZIP and MSIX, Apple silicon and Intel DMGs, and seven x86-64 Linux packages. Linux packages include a native archive, Snap, Debian package, Arch package, Fedora RPM, Flatpak and AppImage. Download dependencies and minimum OS versions are documented in the [installation guides](README.md#install-on-your-computer).
 
 The release includes corresponding source archives for the bundled Qt runtime and the Flatpak WebEngine build. Users only need their chosen installer and `SHA256SUMS`. The one-file Snap installer includes the release Snap and configures its runtime on first install. The checksum job checks the expected filename and presence of each artifact and records the digest of its bytes. Before publication the workflow downloads the artifacts again, compares the manifest, verifies the corresponding Qt source, and compares every uploaded asset against GitHub's SHA-256 digest. [Verify an individual download](install-verify.md)
 
 GitHub publication uses the temporary Actions token with `contents: write` only in the release job. Repository or organization policies must permit that write and creation of version and preview tags. Public downloads use GitHub Releases independently of store registrations. [Actions settings](https://github.com/joomengine/joomengine/settings/actions) · [Repository rules](https://github.com/joomengine/joomengine/settings/rules)
 
 Publishing stages files in a draft. A retry can finish an interrupted draft. A completed release is accepted on retry only when its source commit and uploaded digests match. To distribute changed bytes after publication, assign a new version. GitHub's automatically generated source ZIP and tarball links are generated from the release commit and sit outside the uploaded asset manifest.
+
+[All JoomEngine guides](README.md)

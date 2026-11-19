@@ -1,6 +1,6 @@
 # Publish JoomEngine to distribution channels
 
-Every successful main build and version-tag build publishes its downloads to GitHub Releases. People can install them directly without a store account. To make stable updates available through a store or a package manager, set up the channel below and then push a new version tag. [Release procedure](releases.md) · [Manual installation](../README.md#download-and-install)
+Every successful main build and version-tag build publishes its downloads to GitHub Releases. People can install them directly without a store account. To make stable updates available through a store or a package manager, set up the channel below and then push a new version tag. [Release procedure](releases.md) · [Manual installation](README.md#install-on-your-computer)
 
 | Channel | Registration and deployment | What the release job does |
 | --- | --- | --- |
@@ -20,3 +20,5 @@ Every successful main build and version-tag build publishes its downloads to Git
 3. Direct-download Windows signing and Apple signing/notarization use the existing [repository Actions secrets](https://github.com/joomengine/joomengine/settings/secrets/actions). The platform guides explain where to obtain each value, its encoding and where it goes.
 
 A skipped Snap Store job is expected on a PR or preview. On a stable tag it also requires a successful GitHub release and the repository variable `SNAP_STORE_PUBLISH=true`. The publisher reads `SNAPCRAFT_STORE_CREDENTIALS` from `distribution`. A GitHub Release download can be installed before the Store listing goes live. [Snap Store setup and commands](publishing-linux.md#snap-store)
+
+[All JoomEngine guides](README.md)

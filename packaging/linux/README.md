@@ -1,3 +1,3 @@
 # JoomEngine for Linux
 
-[Install JoomEngine on Linux](../../docs/install-linux.md) · [One-command GitHub Snap installer](../../docs/install-linux.md#snap) · [Ubuntu archive installation and removal](../../docs/install-linux-archive.md)
+[Choose a Linux package](../../docs/install-linux.md) · [Snap installer](../../docs/install-snap.md) · [Ubuntu archive](../../docs/install-linux-archive.md)

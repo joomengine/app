@@ -21,3 +21,5 @@ Windows requires a publisher signature trusted by the computer for a normal MSIX
 Press **Ctrl+Shift+M** or right-click and choose **Show Menu Bar** to access File, Edit and View. **Ctrl+R** reloads the active window with the menu hidden or visible.
 
 Before uninstalling or switching formats, use Playground's **Download** action to keep a copy of your site. You can restore it with **Upload**.
+
+[All JoomEngine guides](README.md)

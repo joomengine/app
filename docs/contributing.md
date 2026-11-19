@@ -81,3 +81,5 @@ python test/native_smoke.py build-qa/Release/JoomEngine.exe
 ```
 
 Open a pull request targeting `main` and describe how you tested your change. The [desktop workflow](../.github/workflows/desktop.yml) links to the packaging and install tests. Verified assets are available from the run's **Artifacts** section. For publication from the main branch and release tags, see [releases](releases.md) and [store publishing](publishing.md).
+
+[All JoomEngine guides](README.md)
