@@ -29,7 +29,8 @@ Install the release Snap from its download directory and open JoomEngine.
 sudo snap install --dangerous ./joomengine_*_amd64.snap
 sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
 sudo snap connect joomengine:browser-support
+sudo snap connect joomengine:hardware-observe
 snap run joomengine
 ```
 
-The local-file flag permits installing the GitHub Release package outside the Snap Store. The KDE content connection supplies Qt WebEngine and its Chromium helper. The browser-support connection allows the helper to set up its process sandbox inside strict Snap confinement. The desktop profile persists across package revisions. The Snap Store reviews browser-support requests that enable the browser's own sandbox.
+The local-file flag permits installing the GitHub Release package outside the Snap Store. The KDE content connection supplies Qt WebEngine and its Chromium helper. The browser-support connection allows the helper to set up its process sandbox inside strict Snap confinement. Qt WebEngine also reads the system PCI device list to identify the graphics adapter during startup. The hardware-observe connection permits that read. The desktop profile persists across package revisions. The Snap Store reviews browser-support requests that enable the browser's own sandbox.

@@ -21,6 +21,12 @@ plugs:
     interface: browser-support
     allow-sandbox: true
 
+layout:
+  /etc/fonts:
+    bind: $SNAP/etc/fonts
+  /usr/share/fontconfig:
+    bind: $SNAP/usr/share/fontconfig
+
 parts:
   application:
     plugin: dump
@@ -28,6 +34,7 @@ parts:
     # Complete the shared Qt runtime's networking, XCB and image dependencies.
     # The strict base has a smaller set of libraries than the build SDK.
     stage-packages:
+      - fontconfig-config
       - libfribidi0
       - liblerc4
       - libnghttp2-14
@@ -44,9 +51,9 @@ parts:
 
 apps:
   joomengine:
-    command: usr/bin/joomengine
+    command: usr/bin/launch-joomengine
     extensions: [kde-neon-qt6]
-    plugs: [browser-support, home]
+    plugs: [browser-support, hardware-observe, home]
     environment:
       XDG_CONFIG_HOME: $SNAP_USER_COMMON/.config
       XDG_CACHE_HOME: $SNAP_USER_COMMON/.cache

@@ -21,8 +21,8 @@ and its incorporated GPL terms are in LICENSES/LGPL-3.0.txt and
 LICENSES/GPL-3.0.txt. Chromium and its third-party components in Qt WebEngine
 retain their respective licenses. The Linux archive uses distribution
 libraries. The Snap uses a separately installed KDE content runtime. The
-Snap also includes Ubuntu's Lerc, SharpYUV and Snappy libraries. Their
-package notices are under usr/share/doc in the Snap.
+Snap includes the Ubuntu libraries and font configuration listed in
+snap/snapcraft.yaml. Their package notices are under usr/share/doc in the Snap.
 The macOS app includes Qt frameworks and Chromium resources. Its Resources
 directory contains the notices and information for obtaining the matching
 source and rebuilding with modified libraries.
