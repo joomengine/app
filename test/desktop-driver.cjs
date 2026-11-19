@@ -4,6 +4,7 @@ const net = require('node:net');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
+const { realpath } = require('node:fs/promises');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 
@@ -73,7 +74,9 @@ async function launch(executable, profile, args = []) {
       Boolean(smokeOwner)
     `));
     const sessionDir = await main('smokeOwner.webContents.session.storagePath');
-    const relative = path.relative(profile, sessionDir);
+    assert.ok(sessionDir, 'The workspace must use a persistent session');
+    // macOS exposes its temp directory through /var -> /private/var.
+    const relative = path.relative(await realpath(profile), await realpath(sessionDir));
     assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative),
       'The workspace must use a persistent partition in its private test profile: ' + sessionDir);
     return {
