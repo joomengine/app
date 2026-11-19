@@ -69,7 +69,7 @@ jobs:
           binary="$app/Contents/MacOS/JoomEngine"
           arch="$EXPECTED_ARCH"
           if [[ "$arch" == x64 ]]; then arch=x86_64; fi
-          lipo -verify_arch "$arch" "$binary"
+          lipo "$binary" -verify_arch "$arch"
           node test/smoke.cjs "$binary"
       - uses: actions/upload-artifact@v4
         with:

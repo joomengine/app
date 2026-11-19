@@ -45,11 +45,20 @@ async function queryDatabase(app, marker, second) {
     editor.focus();
     db.execCommand('selectAll');
     if (!db.execCommand('insertText', false, second ? read : write + read)) throw Error('Adminer editor rejected input');
+  }, marker, second);
+  // Jush asynchronously synchronizes the highlighted editor to the textarea
+  // that Adminer actually posts. Wait for the typed SQL to reach the form.
+  await waitFor('the SQL form value', () => app.renderer(() => {
+    const db = document.querySelector('iframe[title="Database"]').contentDocument;
+    return db.querySelector('textarea[name="query"]')?.value.includes('SELECT value FROM desktop_smoke;');
+  }));
+  await app.renderer(() => {
+    const db = document.querySelector('iframe[title="Database"]').contentDocument;
     const execute = [...db.querySelectorAll('input[type="submit"],button')].find(button =>
       (button.value || button.textContent).trim() === 'Execute');
     if (!execute) throw Error('Adminer Execute button is missing');
     execute.click();
-  }, marker, second);
+  });
   await waitFor(second ? 'the saved database row after restart' : 'the new database row', () => app.renderer(marker => {
     const db = document.querySelector('iframe[title="Database"]').contentDocument;
     const error = db?.querySelector('.error');
@@ -96,9 +105,27 @@ async function exportSite(app, directory) {
   try {
     const { size } = await file.stat();
     assert.ok(size > 1024 * 1024, 'Export must contain Joomla files and the database');
-    const signature = Buffer.alloc(4);
-    await file.read(signature, 0, 4, 0);
-    assert.equal(signature.readUInt32LE(0), 0x04034b50, 'Downloaded bundle must be a ZIP archive');
+    // The Playground exporter generates a ZIP32 bundle with no archive comment.
+    const end = Buffer.alloc(22);
+    assert.equal((await file.read(end, 0, end.length, size - end.length)).bytesRead, end.length);
+    assert.equal(end.readUInt32LE(0), 0x06054b50, 'Complete ZIP central directory is missing');
+    const directorySize = end.readUInt32LE(12);
+    const directoryOffset = end.readUInt32LE(16);
+    assert.equal(directoryOffset + directorySize, size - end.length);
+    const entries = Buffer.alloc(directorySize);
+    assert.equal((await file.read(entries, 0, entries.length, directoryOffset)).bytesRead, entries.length);
+    const filenames = new Set();
+    for (let offset = 0; offset < entries.length;) {
+      assert.equal(entries.readUInt32LE(offset), 0x02014b50);
+      const nameLength = entries.readUInt16LE(offset + 28);
+      const extraLength = entries.readUInt16LE(offset + 30);
+      const commentLength = entries.readUInt16LE(offset + 32);
+      filenames.add(entries.toString('utf8', offset + 46, offset + 46 + nameLength));
+      offset += 46 + nameLength + extraLength + commentLength;
+    }
+    for (const required of ['site/configuration.php', 'database.sql', 'export.json']) {
+      assert.ok(filenames.has(required), 'The downloaded site bundle is missing ' + required);
+    }
   } finally { await file.close(); }
   console.log('Downloaded the complete site bundle.');
 }
@@ -106,11 +133,9 @@ async function exportSite(app, directory) {
 async function liveRun(app, { marker, directory, second }) {
   await dashboard(app);
   await database(app);
+  if (!second) await detach(app);
   await queryDatabase(app, marker, second);
-  if (!second) {
-    await detach(app);
-    await exportSite(app, directory);
-  }
+  if (!second) await exportSite(app, directory);
   await waitFor('the on-disk Playground checkpoint', () => app.renderer(() => {
     const state = document.querySelector('#save-state')?.textContent || '';
     if (/not yet saved|quota/i.test(state)) throw Error(state);
