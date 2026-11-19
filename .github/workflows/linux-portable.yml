@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Flatpak, OSTree and the native test display
-        run: .github/scripts/install-linux-build-deps.sh flatpak flatpak-builder ostree dbus-user-session xdg-desktop-portal-gtk
+        run: .github/scripts/install-linux-build-deps.sh flatpak flatpak-builder elfutils ostree dbus-user-session xdg-desktop-portal-gtk
       - name: Build the distributable Flatpak and its corresponding WebEngine source archive
         run: bash packaging/flatpak/build.sh
       - name: Open the installed bundle and exercise JCB inside Flatpak

@@ -58,13 +58,12 @@ bash packaging/appimage/package.sh "$runtime" "$appdir" "$work/JoomEngine-QA.App
 
 # Test the documented fixed-path launch on Ubuntu's restricted-userns desktops.
 installed=/opt/joomengine/JoomEngine.AppImage
-sudo install -Dm0755 "$image" "$installed"
-if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]] &&
-    [[ $(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns) == 1 ]]; then
-  sudo apparmor_parser --replace packaging/appimage/joomengine.apparmor
-fi
+"$image" --appimage-extract-and-run --install
+cmp "$image" "$installed"
+desktop-file-validate /usr/local/share/applications/org.joomengine.app.AppImage.desktop
 # Type 2's native extraction mode also works on systems without a FUSE device.
 if [[ ! -r /dev/fuse || ! -w /dev/fuse ]]; then export APPIMAGE_EXTRACT_AND_RUN=1; fi
 dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$installed"
-sudo install -m0755 "$work/JoomEngine-QA.AppImage" "$installed"
+"$work/JoomEngine-QA.AppImage" --appimage-extract-and-run --install
+cmp "$work/JoomEngine-QA.AppImage" "$installed"
 dbus-run-session -- xvfb-run -a python3 test/native_smoke.py "$installed"

@@ -167,6 +167,19 @@
     const form = () => dbFrame()?.contentDocument?.querySelector('textarea[name="query"]')?.form;
     await until('Adminer SQL form', form);
     const editor = form();
+    if (write) {
+      // Exercise the real native Edit command while focus is in Adminer's frame.
+      const input = editor.ownerDocument.createElement('input');
+      input.value = 'JoomEngine native edit command';
+      editor.append(input);
+      try {
+        input.focus();
+        input.setSelectionRange(0, 0);
+        signal('select-all', 'Activate native Edit > Select All in a focused tool field.');
+        await until('the native selection in Adminer', () =>
+          input.selectionStart === 0 && input.selectionEnd === input.value.length, 15000);
+      } finally { input.remove(); }
+    }
     const frame = dbFrame().contentWindow;
     const body = new URLSearchParams(new frame.FormData(editor));
     const read = 'SELECT value FROM desktop_smoke;';

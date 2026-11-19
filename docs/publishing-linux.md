@@ -10,7 +10,7 @@ The desktop workflow publishes the tested Linux packages and their SHA-256 check
 
 | Channel | Repository switch | Variables in `distribution` | Secrets in `distribution` |
 | --- | --- | --- | --- |
-| Snap Store, latest/stable | `SNAP_STORE_PUBLISH` | None | `SNAPCRAFT_STORE_CREDENTIALS` |
+| Snap Store, latest/candidate → latest/stable | `SNAP_STORE_PUBLISH` | None | `SNAPCRAFT_STORE_CREDENTIALS` |
 | Debian 13 APT | `DEBIAN_REPO_PUBLISH` | `CLOUDSMITH_NAMESPACE`, `CLOUDSMITH_REPOSITORY` | `CLOUDSMITH_API_KEY` |
 | Fedora 44 RPM | `RPM_REPO_PUBLISH` | Same two Cloudsmith variables | Same Cloudsmith key |
 | Arch User Repository | `AUR_PUBLISH` | `AUR_MAINTAINER_EMAIL`, `AUR_KNOWN_HOSTS` | `AUR_SSH_PRIVATE_KEY` |
@@ -20,8 +20,8 @@ The desktop workflow publishes the tested Linux packages and their SHA-256 check
 ## Snap Store
 
 1. Sign into Ubuntu One, register the public snap name **joomengine**, and complete its listing under your publisher account. An existing owner can add the uploader as a collaborator. [Ubuntu One](https://login.ubuntu.com/) · [Register a snap](https://snapcraft.io/account/register-snap) · [Publisher dashboard](https://snapcraft.io/snaps)
-2. Request Store review for the `browser-support` plug with `allow-sandbox: true` and auto-connection of this plug and `hardware-observe`. Explain that Chromium starts its own renderer sandbox and Qt reads PCI graphics-device information during startup. Supply the snap name, manifest and strict-confinement test from this repository. Canonical controls declaration approval and automatic connections. [Store requests](https://forum.snapcraft.io/c/store-requests/19) · [Snap manifest](../snap/snapcraft.yaml)
-3. On an Ubuntu workstation install Snapcraft, log in as the publisher, and export an upload credential restricted to this snap and stable channel. The final command reads the credential file directly into the GitHub environment secret. It requires a signed-in GitHub CLI account with permission to manage the environment. [Snapcraft export-login](https://documentation.ubuntu.com/snapcraft/stable/reference/commands/export-login/) · [Publisher action permissions](https://github.com/snapcore/action-publish#store-login)
+2. Request Store review for the `browser-support` plug with `allow-sandbox: true` and automatic connection of this plug and `hardware-observe`. Explain that Chromium starts its own renderer sandbox and Qt reads PCI graphics-device information during startup. Supply the snap name, manifest and strict-confinement test from this repository. Canonical controls declaration approval and automatic connections. [Privileged interfaces request form and category](https://forum.snapcraft.io/c/store-requests/privileged-interfaces/27) · [Snap manifest](../snap/snapcraft.yaml)
+3. On an Ubuntu workstation install Snapcraft, log in as the publisher, and export an upload credential restricted to this snap and its candidate and stable channels. The final command reads the credential file directly into the GitHub environment secret. It requires a signed-in GitHub CLI account with permission to manage the environment. [Snapcraft export-login](https://documentation.ubuntu.com/snapcraft/stable/reference/commands/export-login/) · [Publisher action permissions](https://github.com/snapcore/action-publish#store-login)
 
    ```bash
    sudo snap install snapcraft --classic
@@ -30,7 +30,7 @@ The desktop workflow publishes the tested Linux packages and their SHA-256 check
      umask 077
      credential_dir=$(mktemp -d)
      trap 'rm -rf -- "$credential_dir"' EXIT
-     snapcraft export-login --snaps=joomengine --channels=stable \
+     snapcraft export-login --snaps=joomengine --channels=latest/candidate,latest/stable \
        --acls=package_access,package_push,package_update,package_release \
        --expires="$(date -u -d '+90 days' +%Y-%m-%dT%H:%M:%SZ)" "$credential_dir/snap-login"
      gh secret set SNAPCRAFT_STORE_CREDENTIALS --env distribution \
@@ -39,7 +39,8 @@ The desktop workflow publishes the tested Linux packages and their SHA-256 check
    gh variable set SNAP_STORE_PUBLISH --body true --repo joomengine/joomengine
    ```
 
-4. Renew the credential before its expiry. After the tagged workflow succeeds, check the actual revision, version, architecture and channel with `snapcraft status joomengine` in the publisher account, then test `sudo snap install joomengine --channel=latest/stable` on a clean machine.
+4. If you previously configured a stable-only token, generate a new one with both channels and save it in the **distribution** environment. Renew the credential before its expiry. The tagged job uploads the verified GitHub file to **latest/candidate**. On a fresh runner it performs a normal Store install, compares the installed Snap bytes with GitHub, checks the automatic Qt, graphics and browser connections, and opens the app. Only then does it promote that exact revision to **latest/stable**. Check the result with `snapcraft status joomengine`. Once the stable listing is public, users can choose **Install** on the [Snap Store page](https://snapcraft.io/joomengine) or run `sudo snap install joomengine`. No post-install setup is needed.
+5. If Store review holds the first upload, complete Canonical's review in the dashboard and release the approved revision to **latest/candidate**. Re-run the failed GitHub job. It recognizes the identical candidate, tests its actual automatic connections, and promotes it. If Canonical declines an auto-connection or the clean install fails, users can continue using the verified GitHub installer while the publisher resolves the issue. [Manage Snap revisions and releases](https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/manage-revisions-and-releases/)
 
 A skipped Store job is expected for a pull request, a main build, a disabled switch, or an unsuccessful prerequisite release. Store review can hold a revision after upload. Use the tagged workflow and the dashboard to distinguish those cases. The separate local message `joomengine 0.1.0 installed` confirms installation. Run `snap warnings` to read the actual snapd warning and `snap connections joomengine` to see which interfaces are connected.
 

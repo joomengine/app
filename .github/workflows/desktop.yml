@@ -23,6 +23,8 @@ jobs:
         run: |
           c++ -std=c++17 -Wall -Wextra -Werror -Isrc test/policy.cpp -o "$RUNNER_TEMP/policy"
           "$RUNNER_TEMP/policy"
+      - name: Check downloadable assets and upload verification
+        run: python3 test/release_assets.py
       - name: Check tag against package version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

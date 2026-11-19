@@ -177,7 +177,8 @@ public:
             script.setRunsOnSubFrames(false);
             page->scripts().insert(script);
             connect(page, &QWebEnginePage::titleChanged, this, [this, reload](const QString& title) {
-                qa::onTitle(title.toStdString(), [reload] { reload->trigger(); }, [this] { close(); });
+                qa::onTitle(title.toStdString(), [reload] { reload->trigger(); }, [this] { close(); },
+                    [this] { page->action(QWebEnginePage::SelectAll)->trigger(); });
             });
         }
 #endif

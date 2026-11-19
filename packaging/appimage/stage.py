@@ -23,6 +23,7 @@ for name in ("qtbase_*.qm", "qtwebengine_*.qm"):
         shutil.copy2(translation, usr / "translations")
 helper = usr / "libexec/QtWebEngineProcess"
 helper.parent.mkdir()
+shutil.copy2(package / "install.sh", helper.parent / "install-appimage")
 shutil.copy2(sdk / "libexec/QtWebEngineProcess", helper)
 (usr / "bin/qt.conf").write_text("[Paths]\nPrefix=..\n")
 pending = [usr / "bin/joomengine", helper]
