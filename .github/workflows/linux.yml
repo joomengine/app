@@ -38,6 +38,7 @@ jobs:
   snap:
     name: Strictly confined Snap (amd64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -64,6 +65,10 @@ jobs:
           # Both the host test process and the confined browser use these files.
           export TMPDIR="$HOME/snap/joomengine/common"
           dbus-run-session -- xvfb-run -a node test/smoke.cjs /snap/bin/joomengine
+      - name: Boot, reopen and export the live JCB site inside Snap confinement
+        run: |
+          export TMPDIR="$HOME/snap/joomengine/common"
+          dbus-run-session -- xvfb-run -a node test/smoke.cjs /snap/bin/joomengine --live
       - uses: actions/upload-artifact@v4
         with:
           name: linux-snap

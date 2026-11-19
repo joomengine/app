@@ -14,7 +14,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,7 +39,7 @@ jobs:
           } finally {
             if (Test-Path $pfx) { Remove-Item -LiteralPath $pfx -Force }
           }
-      - name: Install and test the MSIX on Windows
+      - name: Install the MSIX and exercise the desktop and live JCB site
         shell: powershell
         run: |
           $msix = Get-Item 'dist/packages/*.msix'

@@ -71,6 +71,7 @@ jobs:
           if [[ "$arch" == x64 ]]; then arch=x86_64; fi
           lipo "$binary" -verify_arch "$arch"
           node test/smoke.cjs "$binary"
+          node test/smoke.cjs "$binary" --live
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg-${{ matrix.arch }}

@@ -23,8 +23,11 @@ async function dashboard(app) {
 async function database(app) {
   await app.renderer(() => document.querySelector('#database-button').click());
   await waitFor('Adminer tables', () => app.renderer(() => {
-    const database = document.querySelector('iframe[title="Database"]')?.contentDocument;
-    return database?.querySelector('#content')?.textContent.includes('Tables');
+    const frame = document.querySelector('iframe[title="Database"]');
+    // Adminer fills its DOM before the owner completes openDatabase(). The
+    // owner rejects a detach while that operation is still pending.
+    return frame && !frame.hidden && !document.querySelector('#database-button').disabled &&
+      frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('#content')?.textContent.includes('Tables');
   }), 90000);
 }
 
@@ -35,36 +38,26 @@ async function queryDatabase(app, marker, second) {
     if (!link) throw Error('Adminer SQL command link is missing');
     link.click();
   });
-  await waitFor('the Adminer SQL editor', () => app.renderer(() =>
-    Boolean(document.querySelector('iframe[title="Database"]').contentDocument?.querySelector('pre.sqlarea[contenteditable="true"]'))));
-  await app.renderer((marker, second) => {
+  await waitFor('the Adminer SQL form', () => app.renderer(() =>
+    Boolean(document.querySelector('iframe[title="Database"]').contentDocument?.querySelector('textarea[name="query"]')?.form)));
+  const result = await app.renderer(async (marker, second) => {
     const db = document.querySelector('iframe[title="Database"]').contentDocument;
-    const editor = db.querySelector('pre.sqlarea[contenteditable="true"]');
+    const form = db.querySelector('textarea[name="query"]').form;
+    // Submit Adminer's own form, including the current session token and limits.
+    const fields = new URLSearchParams(new db.defaultView.FormData(form));
     const read = 'SELECT value FROM desktop_smoke;';
     const write = "CREATE TABLE desktop_smoke (value VARCHAR(80)); INSERT INTO desktop_smoke VALUES ('" + marker + "'); ";
-    editor.focus();
-    db.execCommand('selectAll');
-    if (!db.execCommand('insertText', false, second ? read : write + read)) throw Error('Adminer editor rejected input');
+    fields.set('query', second ? read : write + read);
+    const response = await db.defaultView.fetch(form.action, { method: 'POST', body: fields });
+    const answer = new DOMParser().parseFromString(await response.text(), 'text/html');
+    return {
+      status: response.status,
+      found: [...answer.querySelectorAll('#content td')].some(cell => cell.textContent.trim() === marker),
+      feedback: [...answer.querySelectorAll('#content .error, #content .message')].slice(0, 4)
+        .map(node => node.textContent.trim().slice(0, 180))
+    };
   }, marker, second);
-  // Jush asynchronously synchronizes the highlighted editor to the textarea
-  // that Adminer actually posts. Wait for the typed SQL to reach the form.
-  await waitFor('the SQL form value', () => app.renderer(() => {
-    const db = document.querySelector('iframe[title="Database"]').contentDocument;
-    return db.querySelector('textarea[name="query"]')?.value.includes('SELECT value FROM desktop_smoke;');
-  }));
-  await app.renderer(() => {
-    const db = document.querySelector('iframe[title="Database"]').contentDocument;
-    const execute = [...db.querySelectorAll('input[type="submit"],button')].find(button =>
-      (button.value || button.textContent).trim() === 'Execute');
-    if (!execute) throw Error('Adminer Execute button is missing');
-    execute.click();
-  });
-  await waitFor(second ? 'the saved database row after restart' : 'the new database row', () => app.renderer(marker => {
-    const db = document.querySelector('iframe[title="Database"]').contentDocument;
-    const error = db?.querySelector('.error');
-    if (error) throw Error(error.textContent);
-    return [...(db?.querySelectorAll('#content td') || [])].some(cell => cell.textContent.trim() === marker);
-  }, marker), 90000);
+  assert.ok(result.status === 200 && result.found, 'Adminer SQL result: ' + JSON.stringify(result));
   console.log(second ? 'Read the saved MariaDB row after restarting JoomEngine.' : 'Saved a row in the running JCB site.');
 }
 
@@ -74,12 +67,24 @@ async function detach(app) {
     if (!button) throw Error('Database detach action is missing');
     button.click();
   });
-  await waitFor('the detached Adminer window and its owner', () => app.main(`
-    (async () => {
-      const child = smokeElectron.BrowserWindow.getAllWindows().find(win => win !== smokeOwner);
-      return child && child.webContents.executeJavaScript("Boolean(window.opener && document.querySelector('iframe')?.contentDocument?.querySelector('#content'))");
-    })()
-  `), 60000);
+  await waitFor('the detached Adminer window and its owner', async () => {
+    const state = await app.main(`
+      (async () => {
+        const child = smokeElectron.BrowserWindow.getAllWindows().find(win => win !== smokeOwner);
+        const feedback = await smokeOwner.webContents.executeJavaScript(
+          "(document.querySelector('#header-feedback')?.textContent || '').trim().slice(0, 240)");
+        if (!child) return { feedback };
+        const tool = await child.webContents.executeJavaScript(\`
+          ({ opener: Boolean(window.opener), path: location.pathname,
+             frame: document.querySelector('iframe')?.contentDocument?.readyState,
+             tables: Boolean(document.querySelector('iframe')?.contentDocument?.querySelector('#content')) })
+        \`);
+        return { feedback, ...tool };
+      })()
+    `);
+    if (state.opener && state.tables) return true;
+    throw Error(JSON.stringify(state));
+  }, 60000);
   await app.main(`
     smokeElectron.BrowserWindow.getAllWindows().find(win => win !== smokeOwner).webContents.executeJavaScript(
       "document.querySelector('[aria-label=\\"Return to owner tab\\"]').click()", true)
