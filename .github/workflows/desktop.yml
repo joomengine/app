@@ -15,19 +15,19 @@ permissions:
 
 jobs:
   checks:
-    name: Runtime policy and release version
+    name: Native navigation and release version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm test
+      - name: Check native window navigation
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -Isrc test/policy.cpp -o "$RUNNER_TEMP/policy"
+          "$RUNNER_TEMP/policy"
       - name: Check tag against package version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
-          version=$(node -p 'require("./package.json").version')
+          version=$(cat VERSION)
           [[ "$GITHUB_REF_NAME" == "v$version" ]]
 
   linux:

@@ -1,2 +1,4 @@
-node_modules/
-dist/
+/build/
+/build-*/
+/dist/
+__pycache__/

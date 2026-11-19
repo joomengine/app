@@ -1,4 +1,4 @@
-name: Linux packages
+name: Native Linux packages
 
 on:
   workflow_call:
@@ -8,27 +8,30 @@ permissions:
 
 jobs:
   archive:
-    name: Linux archive (x64)
+    name: Linux GTK archive (x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - run: npm ci
-      - run: node scripts/stage.mjs
-      - run: bash scripts/package-linux.sh
-      - name: Install the archive and test the installed application
+      - name: Install native build and display dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb xauth dbus-x11 libgtk-3-0t64 libnss3 libasound2t64 libgbm1
+          sudo apt-get install -y cmake g++ pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev dbus-x11 xvfb xauth xdotool
+      - name: Build the release and native QA binaries
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target joomengine --parallel
+          cmake -S . -B build-qa -DCMAKE_BUILD_TYPE=Release -DJOOMENGINE_NATIVE_QA=ON
+          cmake --build build-qa --target joomengine --parallel
+      - name: Install and launch the release archive
+        run: |
+          bash scripts/package-linux.sh
           unpack=$(mktemp -d)
           tar -xzf dist/packages/*.tar.gz -C "$unpack"
-          sudo "$unpack"/JoomEngine-*/install.sh
-          dbus-run-session -- xvfb-run -a node test/smoke.cjs /usr/local/bin/joomengine
-      - name: Boot the live JCB site, reopen it and export it
-        run: dbus-run-session -- xvfb-run -a node test/smoke.cjs /usr/local/bin/joomengine --live
+          "$unpack"/JoomEngine-*/install.sh
+          dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$HOME/.local/bin/joomengine"
+      - name: Exercise Playground in the native WebKitGTK engine
+        run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py build-qa/joomengine
       - uses: actions/upload-artifact@v4
         with:
           name: linux-archive
@@ -36,50 +39,56 @@ jobs:
           if-no-files-found: error
 
   snap:
-    name: Strictly confined Snap (amd64)
+    name: Native WebKitGTK Snap (amd64)
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - run: npm ci
-      - run: node scripts/stage.mjs
-      - run: bash scripts/prepare-snap.sh
-      - name: Build Snap
-        uses: snapcore/action-build@v1
-        with:
-          path: dist/snap-project
-        id: build
-      - name: Install the local build and test the confined application
-        env:
-          SNAP_PACKAGE: ${{ steps.build.outputs.snap }}
+      - name: Install build dependencies on the disposable core24-compatible VM
         run: |
-          mkdir -p dist/packages "$HOME/snap/joomengine/common"
-          cp -- "$SNAP_PACKAGE" dist/packages/
-          sudo snap install --dangerous dist/packages/*.snap
-          sudo snap connect joomengine:browser-sandbox :browser-support
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb xauth dbus-user-session
-          # snapd asks the desktop user's systemd manager to create the app's
-          # cgroup. A private dbus-run-session has no such service on hosted CI.
+          sudo apt-get install -y cmake g++ pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev dbus-user-session xvfb xauth xdotool
+          sudo snap install --classic snapcraft
+      - name: Build native release and QA executables
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target joomengine --parallel
+          cmake -S . -B build-qa -DCMAKE_BUILD_TYPE=Release -DJOOMENGINE_NATIVE_QA=ON
+          cmake --build build-qa --target joomengine --parallel
+      - name: Package the release and instrumented test Snap
+        run: |
+          bash scripts/prepare-snap.sh
+          mkdir -p dist/packages dist/qa-snap
+          version=$(cat VERSION)
+          # This hosted Ubuntu VM matches the core24 base. Build directly on
+          # the disposable runner without downloading a separate LXD OS image.
+          (cd dist/snap-project && sudo snapcraft pack --destructive-mode --output="../packages/joomengine_${version}_amd64.snap")
+          # Keep the release output pristine. The second local Snap exercises
+          # the same filesystem, native runtime and confinement with QA enabled.
+          sudo install -m 0755 build-qa/joomengine dist/snap-project/prime/usr/bin/joomengine
+          sudo snap pack dist/snap-project/prime dist/qa-snap
+      - name: Install and launch the release in a real user session
+        run: |
           sudo loginctl enable-linger "$(id -un)"
           sudo systemctl start "user@$(id -u).service"
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          runtime="/run/user/$(id -u)"
+          export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           systemctl --user start dbus.socket
-          # Both the host test process and the confined browser use these files.
-          export TMPDIR="$HOME/snap/joomengine/common"
+          sudo snap install --dangerous dist/packages/*.snap
+          test -x /snap/joomengine/current/gnome-platform/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess || \
+            test -x /snap/gnome-46-2404/current/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-            --setenv="PATH=$PATH" --setenv="TMPDIR=$TMPDIR" xvfb-run -a node test/smoke.cjs /snap/bin/joomengine
-      - name: Boot, reopen and export the live JCB site inside Snap confinement
+            xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
+      - name: Exercise Playground in the confined native QA build
         run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-          export TMPDIR="$HOME/snap/joomengine/common"
+          sudo snap remove --purge joomengine
+          sudo snap install --dangerous dist/qa-snap/*.snap
+          runtime="/run/user/$(id -u)"
+          export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
+          tmp="$HOME/snap/joomengine/common"
+          mkdir -p "$tmp"
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-            --setenv="PATH=$PATH" --setenv="TMPDIR=$TMPDIR" xvfb-run -a node test/smoke.cjs /snap/bin/joomengine --live
+            --setenv="TMPDIR=$tmp" xvfb-run -a python3 test/native_smoke.py /snap/bin/joomengine
       - uses: actions/upload-artifact@v4
         with:
           name: linux-snap

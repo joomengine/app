@@ -1,13 +1,18 @@
 JoomEngine desktop application
 Copyright 2026 JoomEngine contributors.
 
-The JoomEngine pearl rocket icon is project artwork by JoomEngine. The desktop
-icons are rendered from src/brand/favicon.svg in joomengine/playground,
+The GetBible desktop app inspired the C++ native webview approach and
+multi-platform packages: https://github.com/getbible/desktop.
+JoomEngine is an independent application exclusively for JoomEngine Playground.
+
+The JoomEngine pearl rocket icon is project artwork by JoomEngine. Desktop
+icons were rendered from src/brand/favicon.svg in joomengine/playground,
 revision 1dd95451f8a0c3fda51802f8cbf0a1e72d0fb079.
 https://github.com/joomengine/playground/blob/main/NOTICE
 
-The distribution includes Electron and Chromium, with their accompanying
-licenses and third-party notices. Joomla, Joomla Component Builder, PHP-WASM,
-MariaDB-WASM and the editor are delivered by the hosted Playground. Their
-acknowledgments and licenses are maintained with the Playground distribution.
-https://github.com/joomengine/playground/blob/main/NOTICE
+CHOC is copyright Tracktion Corporation and distributed under the ISC license
+in LICENSES/CHOC-ISC.txt. Windows uses the Microsoft WebView2 SDK loader;
+its terms are included in LICENSES/WebView2-SDK.txt. The native webview on
+each platform is maintained by its provider. Joomla, JCB, PHP-WASM, MariaDB
+and related browser assets are provided by the hosted Playground. Their
+attributions are maintained with the Playground distribution.

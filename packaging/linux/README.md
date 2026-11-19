@@ -1,36 +1,31 @@
 # JoomEngine for Linux
 
-## Portable archive
-
-Extract the archive and run `app/joomengine` on a Linux x86-64 desktop with working unprivileged user namespaces. To install an application-menu entry, or to run on Ubuntu with restricted user namespaces, run the following commands from the extracted directory.
+The x86-64 application uses GTK 3 and the operating system's WebKitGTK 4.1 runtime. The release workflow builds and tests on Ubuntu 24.04. Install its runtime dependencies with the following command.
 
 ```sh
-sudo ./install.sh
-joomengine
+sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0
 ```
 
-The installer places the application in `/opt/joomengine`. On Ubuntu it installs an AppArmor rule scoped to the root-owned JoomEngine executable so Chromium can use its namespace sandbox. To update, close JoomEngine and run `sudo ./install.sh` from the new archive. The installer retains the two most recent installations. User projects live separately in the application profile.
+## Portable archive
 
-These commands remove the system installation and retain your projects.
+Extract the archive and run `./joomengine`. Run `./install.sh` from the extracted directory to add an applications-menu entry for your account. The installer needs Python 3 and writes the executable to `~/.local/bin`. Close JoomEngine and run the installer from a newer archive to update.
+
+These commands remove the installed files and retain saved workspaces.
 
 ```sh
-if [ -f /etc/apparmor.d/joomengine ]; then
-    sudo apparmor_parser -R /etc/apparmor.d/joomengine
-    sudo rm -f /etc/apparmor.d/joomengine
-fi
-sudo rm -f /usr/local/bin/joomengine /usr/local/share/applications/joomengine.desktop \
-    /usr/local/share/icons/hicolor/512x512/apps/joomengine.png
-sudo rm -rf /opt/joomengine
+share="${XDG_DATA_HOME:-$HOME/.local/share}"
+rm -f "$HOME/.local/bin/joomengine" "$share/applications/org.joomengine.app.desktop" \
+    "$share/icons/hicolor/512x512/apps/joomengine.png"
+rm -rf "$share/joomengine/licenses"
 ```
 
 ## Snap
 
-Download the release Snap into its own directory. Install it, connect the browser sandbox and start JoomEngine.
+Install the release Snap from its download directory and open JoomEngine.
 
 ```sh
 sudo snap install --dangerous ./joomengine_*_amd64.snap
-sudo snap connect joomengine:browser-sandbox :browser-support
 snap run joomengine
 ```
 
-The local-file flag allows Snap to install an artifact distributed outside its store. The browser connection lets Chromium sandbox its processes inside strict Snap confinement. JoomEngine stores its desktop profile in the Snap's per-user common directory across package revisions. You can remove the installed Snap with `sudo snap remove joomengine`.
+The local-file flag permits installing the GitHub Release package outside the Snap Store. The Snap runs under strict confinement and uses the GNOME platform's WebKitGTK engine and helper processes. Its desktop profile persists across package revisions.

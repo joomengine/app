@@ -6,8 +6,8 @@ if [[ "$(uname -s)" != Darwin ]]; then
   echo "The DMG must be built on macOS." >&2
   exit 1
 fi
-app="$PWD/dist/staged/JoomEngine.app"
-[[ -d "$app" ]] || { echo "Stage JoomEngine with npm run stage first." >&2; exit 1; }
+app="$PWD/build/JoomEngine.app"
+[[ -d "$app" ]] || { echo "Build JoomEngine using CMake in build/ first." >&2; exit 1; }
 
 temp_dir="$(mktemp -d)"
 keychain=""
@@ -45,16 +45,16 @@ if [[ -n "${APPLE_ID:-}${APPLE_TEAM_ID:-}${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; t
 fi
 
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
-arch="$(node -p 'process.arch')"
-case "$arch" in x64|arm64) ;; *) echo "Unsupported macOS architecture: $arch" >&2; exit 1 ;; esac
-# Keep Electron's and Chromium's distribution notices with the installed copy.
-for notice in dist/staged/LICENSE*; do
-  if [[ -f "$notice" ]]; then
-    mkdir -p "$app/Contents/Resources/licenses"
-    cp "$notice" "$app/Contents/Resources/licenses/"
-  fi
-done
-node packaging/macos/sign.mjs "$app"
+arch="$(uname -m)"
+case "$arch" in x86_64) arch=x64 ;; arm64) ;; *) echo "Unsupported macOS architecture: $arch" >&2; exit 1 ;; esac
+if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+  signature=(--force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY")
+  if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" ]]; then signature+=(--keychain "$APPLE_SIGNING_KEYCHAIN"); fi
+  codesign "${signature[@]}" "$app"
+else
+  codesign --force --sign - --timestamp=none "$app"
+fi
+codesign --verify --deep --strict "$app"
 mkdir -p "$temp_dir/image" dist/packages
 ditto "$app" "$temp_dir/image/JoomEngine.app"
 ln -s /Applications "$temp_dir/image/Applications"

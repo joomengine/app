@@ -47,14 +47,24 @@ try {
     # Windows activates a registered MSIX through its execution alias. Spawning
     # the executable directly under Program Files/WindowsApps bypasses activation.
     $executable = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/joomengine.exe'
-    # Use a shared download destination outside MSIX's redirected AppData.
-    $env:TEMP = $env:RUNNER_TEMP
-    $env:TMP = $env:RUNNER_TEMP
-    $smoke = Join-Path $PSScriptRoot '../../test/smoke.cjs'
-    & node $smoke $executable
-    if ($LASTEXITCODE) { throw "Packaged application smoke test failed ($LASTEXITCODE)." }
-    & node $smoke $executable --live
-    if ($LASTEXITCODE) { throw "Live JCB deployment, database and export test failed ($LASTEXITCODE)." }
+    $app = Start-Process -FilePath $executable -PassThru
+    try {
+        $deadline = [DateTime]::UtcNow.AddMinutes(2)
+        do {
+            Start-Sleep -Milliseconds 400
+            $app.Refresh()
+            if ($app.HasExited) { throw "JoomEngine exited during startup ($($app.ExitCode))." }
+        } until ($app.MainWindowTitle -like '*JoomEngine Rocket*' -or [DateTime]::UtcNow -ge $deadline)
+        if ($app.MainWindowTitle -notlike '*JoomEngine Rocket*') {
+            throw "The installed WebView2 host did not render the live Playground. Window title: $($app.MainWindowTitle)"
+        }
+        Write-Host "Installed MSIX rendered: $($app.MainWindowTitle)"
+    } finally {
+        if (-not $app.HasExited) {
+            $null = $app.CloseMainWindow()
+            if (-not $app.WaitForExit(15000)) { $app.Kill() }
+        }
+    }
 } finally {
     if ($installed) { Remove-AppxPackage -Package $installed.PackageFullName }
     if ($cert) {

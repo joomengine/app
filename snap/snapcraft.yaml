@@ -5,7 +5,7 @@ adopt-info: application
 summary: Build Joomla extensions with JoomEngine Playground
 description: |
   Run the JCB development workspace on your desktop with persistent sites,
-  detached tool windows and project downloads.
+  detached tool windows and project downloads using native WebKitGTK.
 website: https://playground.joomengine.org/
 source-code: https://github.com/joomengine/app
 issues: https://github.com/joomengine/app/issues
@@ -15,10 +15,11 @@ confinement: strict
 platforms:
   amd64:
 
-plugs:
-  browser-sandbox:
-    interface: browser-support
-    allow-sandbox: true
+slots:
+  workspace-bus:
+    interface: dbus
+    bus: session
+    name: org.joomengine.app
 
 parts:
   application:
@@ -27,23 +28,15 @@ parts:
     override-pull: |
       craftctl default
       craftctl set version="$(cat "$CRAFT_PROJECT_DIR/VERSION")"
-    stage-packages:
-      - libasound2t64
-      - libnspr4
-      - libnss3
-      - libsecret-1-0
-      - libxss1
 
 apps:
   joomengine:
-    command: opt/joomengine/joomengine
+    command: usr/bin/joomengine
+    # core24's GNOME runtime contains the matching library, WebKitWebProcess
+    # and WebKitNetworkProcess and mounts their expected absolute paths.
     extensions: [gnome]
-    plugs:
-      - audio-playback
-      - browser-sandbox
-      - home
-      - network
-      - network-bind
+    slots: [workspace-bus]
+    plugs: [audio-playback, browser-support, home, network]
     environment:
       XDG_CONFIG_HOME: $SNAP_USER_COMMON/.config
       XDG_CACHE_HOME: $SNAP_USER_COMMON/.cache
