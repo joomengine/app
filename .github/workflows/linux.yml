@@ -76,6 +76,7 @@ jobs:
           sudo snap install --dangerous dist/packages/*.snap
           sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
           sudo snap connect joomengine:browser-support
+          sudo snap connect joomengine:hardware-observe
           # A Snapped shell uses the same command chain, base and providers
           # as the installed binary. The build VM can have extra libraries.
           systemd-run --user --wait --pipe --collect --quiet xvfb-run -a snap run --shell joomengine -c '
@@ -101,12 +102,21 @@ jobs:
           sudo snap install --dangerous dist/qa-snap/*.snap
           sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
           sudo snap connect joomengine:browser-support
+          sudo snap connect joomengine:hardware-observe
           runtime="/run/user/$(id -u)"
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           tmp="$HOME/snap/joomengine/common"
           mkdir -p "$tmp"
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
             --setenv="TMPDIR=$tmp" xvfb-run -a python3 test/native_smoke.py /snap/bin/joomengine
+      - name: Show Snap process and confinement diagnostics on failure
+        if: failure()
+        run: |
+          snap connections joomengine || true
+          sudo journalctl -k -b --no-pager | grep -Ei 'apparmor=|seccomp|segfault|trap' | grep -Ei 'joomengine|QtWebEngine' | tail -50 || true
+          if command -v coredumpctl >/dev/null; then
+            sudo coredumpctl --no-pager list --since '-30 min' | grep -Ei 'joomengine|QtWebEngine' || true
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: linux-snap

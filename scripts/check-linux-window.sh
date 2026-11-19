@@ -5,7 +5,14 @@ set -euo pipefail
 child=$!
 trap 'kill "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true' EXIT
 for ((seconds = 0; seconds < 60; seconds++)); do
-  kill -0 "$child"
+  if ! kill -0 "$child" 2>/dev/null; then
+    status=0
+    wait "$child" || status=$?
+    trap - EXIT
+    echo "JoomEngine exited before its window appeared (process status $status)." >&2
+    if (( status == 0 )); then exit 1; fi
+    exit "$status"
+  fi
   if xdotool search --onlyvisible --name 'JoomEngine' >/dev/null; then
     echo "The installed JoomEngine application opened its native desktop window."
     exit 0
