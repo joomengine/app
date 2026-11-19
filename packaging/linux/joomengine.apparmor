@@ -1,0 +1,9 @@
+abi <abi/4.0>,
+include <tunables/global>
+
+# Ubuntu's restricted user namespaces require an exception for the Chromium
+# sandbox. Only root can install executables beneath this directory.
+profile joomengine /opt/joomengine/releases/build.*/joomengine flags=(unconfined) {
+  userns,
+  include if exists <local/joomengine>
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Desktop workspace fixture</title>
+<button id="detach" onclick="window.tool = window.open('/action.html', '', 'popup,width=700,height=500')">Detach</button>
+<a id="export" download="project.bin">Export</a>
+<script type="module">
+  try {
+    await navigator.serviceWorker.register('/service-worker.mjs', { type: 'module' });
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    }
+    if (!crossOriginIsolated) {
+      location.reload();
+    } else {
+      const memory = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
+      const worker = new Worker('/worker.mjs', { type: 'module' });
+      const done = new Promise((resolve, reject) => {
+        worker.onmessage = resolve;
+        worker.onerror = event => reject(Error(event.message));
+      });
+      worker.postMessage({ memory, nested: true });
+      await done;
+      worker.terminate();
+      document.querySelector('#export').href = URL.createObjectURL(new Blob([new Uint8Array([0, 255, 128, 74, 67, 66])]));
+      document.body.dataset.workers = String(Atomics.load(new Int32Array(memory.buffer), 0));
+    }
+  } catch (error) {
+    document.body.dataset.error = error.message;
+  }
+</script>

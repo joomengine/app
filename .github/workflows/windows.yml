@@ -1,0 +1,52 @@
+name: Windows MSIX
+
+on:
+  workflow_call:
+    secrets:
+      WINDOWS_PFX_BASE64:
+        required: false
+      WINDOWS_PFX_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: node scripts/stage.mjs
+      - name: Build the x64 MSIX
+        shell: pwsh
+        env:
+          WINDOWS_PUBLISHER: ${{ vars.WINDOWS_PUBLISHER }}
+          WINDOWS_PFX_BASE64: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_BASE64 || '' }}
+          WINDOWS_PFX_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_PFX_PASSWORD || '' }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'joomengine-release.pfx'
+          try {
+            if ($env:WINDOWS_PFX_BASE64) {
+              [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+              $env:WINDOWS_PFX_PATH = $pfx
+            }
+            ./scripts/package-windows.ps1
+          } finally {
+            if (Test-Path $pfx) { Remove-Item -LiteralPath $pfx -Force }
+          }
+      - name: Install and test the MSIX on Windows
+        shell: powershell
+        run: |
+          $msix = Get-Item 'dist/packages/*.msix'
+          ./packaging/windows/test-package.ps1 -PackagePath $msix.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msix
+          path: dist/packages/*.msix
+          if-no-files-found: error
+          compression-level: 0

@@ -22,13 +22,30 @@ function windowTarget(rawURL) {
 
 const workspacePermissions = new Set(['clipboard-sanitized-write', 'fullscreen', 'persistent-storage']);
 
-function allowPermission(permission, requestingURL) {
-  if (!workspacePermissions.has(permission)) return false;
+function isPlaygroundPage(rawURL) {
   try {
-    return new URL(requestingURL).origin === PLAYGROUND_ORIGIN;
+    const url = new URL(rawURL);
+    return url.origin === PLAYGROUND_ORIGIN && !url.username && !url.password;
   } catch {
     return false;
   }
 }
 
-module.exports = { PLAYGROUND_URL, PARTITION, windowTarget, allowPermission };
+function allowPermission(permission, requestingURL) {
+  return workspacePermissions.has(permission) && isPlaygroundPage(requestingURL);
+}
+
+function permissionPrompt(permission, requestingURL, ownerURL) {
+  if (!isPlaygroundPage(ownerURL)) return;
+  if (permission === 'clipboard-read' && isPlaygroundPage(requestingURL)) {
+    return 'Allow this workspace to read your clipboard?';
+  }
+  // The optional local AI provider runs inside Playground's sandboxed srcdoc.
+  if (!isPlaygroundPage(requestingURL) && requestingURL !== 'about:srcdoc') return;
+  if (permission === 'loopback-network') return 'Allow this workspace to connect to services on this computer?';
+  if (permission === 'local-network' || permission === 'local-network-access') {
+    return 'Allow this workspace to connect to services on your local network?';
+  }
+}
+
+module.exports = { PLAYGROUND_URL, PARTITION, windowTarget, allowPermission, permissionPrompt };

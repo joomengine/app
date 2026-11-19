@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const { app, BrowserWindow, clipboard, dialog, Menu, session, shell } = require('electron');
-const { PLAYGROUND_URL, PARTITION, windowTarget, allowPermission } = require('./policy.cjs');
+const { PLAYGROUND_URL, PARTITION, windowTarget, allowPermission, permissionPrompt } = require('./policy.cjs');
 
 const webPreferences = {
   partition: PARTITION,
@@ -84,8 +84,16 @@ function prepareSession() {
   workspaceSession = session.fromPartition(PARTITION);
   workspaceSession.setPermissionCheckHandler((_contents, permission, origin) =>
     allowPermission(permission, origin));
-  workspaceSession.setPermissionRequestHandler((_contents, permission, callback, details) =>
-    callback(allowPermission(permission, details.requestingUrl)));
+  workspaceSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    if (allowPermission(permission, details.requestingUrl)) return callback(true);
+    const window = contents && BrowserWindow.fromWebContents(contents);
+    const question = window && permissionPrompt(permission, details.requestingUrl, contents.getURL());
+    if (!question) return callback(false);
+    dialog.showMessageBox(window, {
+      type: 'question', message: question,
+      buttons: ['Deny', 'Allow once'], defaultId: 0, cancelId: 0
+    }).then(({ response }) => callback(response === 1), () => callback(false));
+  });
 
   // Install controls before the first navigation, including in nested popups.
   // No request or download interceptor: workers, external resources and the
