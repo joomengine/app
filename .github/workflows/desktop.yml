@@ -16,6 +16,8 @@ permissions:
 jobs:
   checks:
     name: Native navigation and release version
+    outputs:
+      release-tag: ${{ steps.tag.outputs.valid }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -26,11 +28,13 @@ jobs:
       - name: Check downloadable assets and upload verification
         run: python3 test/release_assets.py
       - name: Check tag against package version
-        if: startsWith(github.ref, 'refs/tags/v')
+        id: tag
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
           version=$(cat VERSION)
-          [[ "$GITHUB_REF_NAME" == "v$version" ]]
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$GITHUB_REF_NAME" == "v$version" ]]
+          echo "valid=true" >> "$GITHUB_OUTPUT"
 
   linux:
     needs: checks
@@ -47,12 +51,20 @@ jobs:
   windows:
     needs: checks
     uses: ./.github/workflows/windows.yml
-    secrets: inherit
+    secrets:
+      WINDOWS_PFX_BASE64: ${{ needs.checks.outputs.release-tag == 'true' && secrets.WINDOWS_PFX_BASE64 || '' }}
+      WINDOWS_PFX_PASSWORD: ${{ needs.checks.outputs.release-tag == 'true' && secrets.WINDOWS_PFX_PASSWORD || '' }}
 
   macos:
     needs: checks
     uses: ./.github/workflows/macos.yml
-    secrets: inherit
+    secrets:
+      APPLE_CERTIFICATE_BASE64: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_CERTIFICATE_BASE64 || '' }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      APPLE_SIGNING_IDENTITY: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      APPLE_ID: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_ID || '' }}
+      APPLE_TEAM_ID: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_TEAM_ID || '' }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ needs.checks.outputs.release-tag == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
 
   downloads:
     name: Verify package set and generate SHA-256 downloads
@@ -74,7 +86,7 @@ jobs:
 
   release:
     name: Publish verified GitHub downloads
-    if: (github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: downloads
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -101,13 +113,13 @@ jobs:
         run: scripts/publish-release.sh "$RUNNER_TEMP/downloads"
 
   linux-stores:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v')
     needs: release
     uses: ./.github/workflows/linux-publish.yml
     secrets: inherit
 
   microsoft-store:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'
     needs: release
     uses: ./.github/workflows/microsoft-store.yml
     secrets: inherit

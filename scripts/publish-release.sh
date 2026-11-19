@@ -21,17 +21,25 @@ fi
 
 dir=$(realpath "$1")
 notes=$(mktemp)
-existing=$(mktemp)
-trap 'rm -f "$notes" "$existing"' EXIT
+existing=$(mktemp -d)
+trap 'rm -f "$notes"; rm -rf -- "$existing"' EXIT
 python3 scripts/release_notes.py "$tag" > "$notes"
 
-if gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft > "$existing"; then
-  if [[ $(cat "$existing") == false ]]; then
+if gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft > "$existing/draft"; then
+  if [[ $(cat "$existing/draft") == false ]]; then
     # A successful re-run reuses an identical published release. Existing public
     # binaries and their checksums must never be replaced behind the same URL.
     target=$(gh api "repos/$repo/commits/$tag" --jq .sha)
     [[ $target == "$commit" ]] || { echo "Tag $tag belongs to a different commit" >&2; exit 1; }
-    python3 scripts/verify-release.py "$repo" "$tag" "$dir"
+    if [[ $GITHUB_REF == refs/heads/main ]]; then
+      # Re-running main can produce fresh build artifacts for a Store submission.
+      # Keep the already published preview and verify its own public checksums.
+      gh release download "$tag" -R "$repo" --pattern SHA256SUMS --dir "$existing"
+      cmp <(awk '{print $2}' "$dir/SHA256SUMS" | sort) <(awk '{print $2}' "$existing/SHA256SUMS" | sort)
+      python3 scripts/verify-release.py "$repo" "$tag" "$existing"
+    else
+      python3 scripts/verify-release.py "$repo" "$tag" "$dir"
+    fi
     exit 0
   fi
 else

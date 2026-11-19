@@ -1,0 +1,84 @@
+name: Start stable release
+run-name: Start JoomEngine release ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact VERSION on main, without the v prefix
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  start:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    concurrency:
+      group: start-stable-release
+      cancel-in-progress: false
+    steps:
+      - name: Validate main, create the version tag and start its desktop build
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        with:
+          script: |
+            const repo = context.repo;
+            const version = process.env.REQUESTED_VERSION;
+            if (!/^\d+\.\d+\.\d+$/.test(version))
+              throw new Error('Enter the exact numeric VERSION, such as 0.2.0.');
+            const tag = 'v' + version;
+            const workflow = { ...repo, workflow_id: 'desktop.yml' };
+            const { data: main } = await github.rest.git.getRef({ ...repo, ref: 'heads/main' });
+            if (main.object.sha !== context.sha)
+              throw new Error('main moved after the workflow was started. Start the release again on the updated main.');
+            const { data: file } = await github.rest.repos.getContent({ ...repo, path: 'VERSION', ref: context.sha });
+            const configured = Buffer.from(file.content, 'base64').toString('utf8').trim();
+            if (configured !== version) throw new Error('The selected main commit has VERSION ' + configured + '.');
+
+            async function optional(request) {
+              try { return (await request).data; }
+              catch (error) { if (error.status === 404) return null; throw error; }
+            }
+            if (await optional(github.rest.git.getRef({ ...repo, ref: 'heads/' + tag })))
+              throw new Error('A branch has the same name as the release tag. The dispatch would be ambiguous.');
+            const existing = await optional(github.rest.git.getRef({ ...repo, ref: 'tags/' + tag }));
+            const release = await optional(github.rest.repos.getReleaseByTag({ ...repo, tag }));
+            if (existing) {
+              // getCommit resolves both annotated and lightweight tags to their target commit.
+              const { data: commit } = await github.rest.repos.getCommit({ ...repo, ref: tag });
+              if (commit.sha !== context.sha) throw new Error(tag + ' already points to a different commit.');
+            } else {
+              if (release && !release.draft) throw new Error('The published release is missing its original tag.');
+              await github.rest.git.createRef({ ...repo, ref: 'refs/tags/' + tag, sha: context.sha });
+            }
+
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              ...workflow, head_sha: context.sha, per_page: 100
+            });
+            const previous = runs.workflow_runs.find(run =>
+              run.head_branch === tag && ['push', 'workflow_dispatch'].includes(run.event));
+            let message;
+            if (release && !release.draft) {
+              message = `[JoomEngine ${version} is already published](${release.html_url}).`;
+              if (previous) message += ` [Open its workflow](${previous.html_url}) to retry any failed store jobs.`;
+            } else if (previous && previous.status !== 'completed') {
+              message = `[The tagged build is already running](${previous.html_url}).`;
+            } else if (previous && previous.conclusion === 'failure' &&
+                       Date.now() - Date.parse(previous.created_at) < 30 * 86400000) {
+              await github.rest.actions.reRunWorkflowFailedJobs({ ...repo, run_id: previous.id });
+              message = `[Retrying the failed jobs for ${tag}](${previous.html_url}).`;
+            } else {
+              // A tag created by GITHUB_TOKEN does not trigger push workflows;
+              // an explicit workflow dispatch using this token does start a run.
+              const { data } = await github.rest.actions.createWorkflowDispatch({ ...workflow, ref: tag });
+              const list = `${context.serverUrl}/${repo.owner}/${repo.repo}/actions/workflows/desktop.yml`;
+              message = `[Open the tagged build for ${tag}](${data?.html_url || list}).`;
+            }
+            core.info(message);
+            await core.summary.addRaw(message).write();
