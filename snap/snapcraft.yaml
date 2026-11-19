@@ -25,6 +25,9 @@ parts:
   application:
     plugin: dump
     source: payload
+    # The Qt content provider links to these Noble libraries but leaves them
+    # to consumers. They are needed by Chromium and image format plugins.
+    stage-packages: [liblerc4, libsharpyuv0, libsnappy1v5]
     override-pull: |
       craftctl default
       craftctl set version="$(cat "$CRAFT_PROJECT_DIR/VERSION")"

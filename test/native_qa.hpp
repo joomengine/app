@@ -50,7 +50,7 @@ void onTitle(std::string_view title, Reload reload, Quit quit) {
     log << command << ' ' << detail << '\n';
     log.close();
 
-    if (command == "reload") reload();
+    if (command == "reload" || command == "retry-module") reload();
     if (command == "fail" || command == "pass") {
         result = command == "pass" ? 0 : 1;
         quit();

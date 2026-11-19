@@ -23,7 +23,7 @@ jobs:
   package:
     name: macOS DMG (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 55
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -34,10 +34,29 @@ jobs:
             runner: macos-15-intel
     steps:
       - uses: actions/checkout@v4
-      - name: Build the system WebKit application
+      - uses: actions/cache@v4
+        id: sdk
+        with:
+          path: ${{ runner.temp }}/qt-macos
+          key: qt-macos-universal-${{ hashFiles('packaging/macos/qt-sdk.lock', '.github/scripts/install-macos-qt.sh') }}
+      - name: Install the pinned macOS Qt WebEngine SDK
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: .github/scripts/install-macos-qt.sh "$RUNNER_TEMP/qt-macos"
+      - name: Use the Qt SDK
+        run: |
+          echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/qt-macos" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/qt-macos/bin" >> "$GITHUB_PATH"
+          echo "QT_NOTICE_CACHE=$RUNNER_TEMP/qt-notices" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qt-notices
+          key: qt-notices-6.11.2-${{ hashFiles('scripts/package-qt-notices.py') }}
+      - name: Build the native Qt WebEngine application
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release --parallel
+          cmake -S . -B build-qa -DJOOMENGINE_NATIVE_QA=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-qa --config Release --parallel
       - name: Package disk image
         env:
           APPLE_CERTIFICATE_BASE64: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_CERTIFICATE_BASE64 || '' }}
@@ -47,6 +66,11 @@ jobs:
           APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
         run: bash scripts/package-macos.sh
+      - name: Deploy the QA bundle and put the SDK aside for both launch tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/QA"
+          scripts/deploy-macos-qt.sh build-qa/JoomEngine.app "$RUNNER_TEMP/QA/JoomEngine.app"
+          mv "$RUNNER_TEMP/qt-macos" "$RUNNER_TEMP/unavailable-sdk"
       - name: Copy JoomEngine from its disk image and launch it
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
@@ -68,21 +92,32 @@ jobs:
           arch="$EXPECTED_ARCH"
           if [[ "$arch" == x64 ]]; then arch=x86_64; fi
           lipo "$binary" -verify_arch "$arch"
-          otool -L "$binary" | grep '/System/Library/Frameworks/WebKit.framework/'
+          core="$app/Contents/Frameworks/QtWebEngineCore.framework"
+          [[ "$(lipo -archs "$core/QtWebEngineCore")" == "$arch" ]]
+          helper="$core/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+          [[ "$(lipo -archs "$helper")" == "$arch" ]]
+          test -x "$helper"
           "$binary" &
           app_pid=$!
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
-          sleep 5
-          kill -0 "$app_pid"
+          # Chromium starts its own processes only after the native webview starts.
+          for ((i=0; i<45; i++)); do
+            kill -0 "$app_pid"
+            if pgrep -P "$app_pid" -f 'QtWebEngineProcess' >/dev/null; then break; fi
+            sleep 1
+          done
+          pgrep -P "$app_pid" -f 'QtWebEngineProcess' >/dev/null
           kill "$app_pid"
           wait "$app_pid" || true
           trap - EXIT
-      - name: Exercise live JCB in the native WebKit host
+      - name: Exercise live JCB in the deployed Qt WebEngine host
+        run: python3 test/native_smoke.py "$RUNNER_TEMP/QA/JoomEngine.app/Contents/MacOS/JoomEngine"
+      - name: Return the SDK to its build-cache location
+        if: always()
         run: |
-          cmake -S . -B build-qa -DJOOMENGINE_NATIVE_QA=ON -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-qa --config Release --parallel
-          codesign --force --sign - --timestamp=none build-qa/JoomEngine.app
-          python3 test/native_smoke.py build-qa/JoomEngine.app/Contents/MacOS/JoomEngine
+          if [[ -d "$RUNNER_TEMP/unavailable-sdk" ]]; then
+            mv "$RUNNER_TEMP/unavailable-sdk" "$RUNNER_TEMP/qt-macos"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg-${{ matrix.arch }}

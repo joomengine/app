@@ -56,7 +56,11 @@ jobs:
           # This hosted Ubuntu VM matches the core24 base. Build directly on
           # the disposable runner without downloading a separate LXD OS image.
           output="joomengine_${version}_amd64.snap"
-          (cd dist/snap-project && sudo snapcraft pack --destructive-mode --output="$output")
+          set -o pipefail
+          (cd dist/snap-project && sudo snapcraft pack --destructive-mode --output="$output") 2>&1 | tee "$RUNNER_TEMP/snapcraft.log"
+          # Snapcraft checks ELF dependencies recursively against the effective
+          # stage, base and content runtime, where the host's libraries cannot help.
+          if grep -F "missing dependency '" "$RUNNER_TEMP/snapcraft.log"; then exit 1; fi
           install -m 0644 "dist/snap-project/$output" dist/packages/
           # Keep the release output pristine. The second local Snap exercises
           # the same filesystem, native runtime and confinement with QA enabled.

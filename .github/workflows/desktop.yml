@@ -52,10 +52,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: packages
           merge-multiple: true
+      - name: Retrieve the corresponding source for the Qt libraries in the DMGs
+        run: python3 scripts/package-qt-notices.py --source-only packages
       - name: Publish release files and checksums
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,6 +68,9 @@ jobs:
           shopt -s nullglob
           assets=(*.tar.gz *.snap *.msix *-arm64.dmg *-x64.dmg)
           [[ ${#assets[@]} -eq 5 ]]
+          qt_source=(qt-everywhere-src-*.tar.xz)
+          [[ ${#qt_source[@]} -eq 1 ]]
+          assets+=("${qt_source[0]}")
           sha256sum "${assets[@]}" > SHA256SUMS
           if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber

@@ -13,7 +13,26 @@ import uuid
 from zipfile import BadZipFile, ZipFile
 
 
-def exported(path):
+def contains_marker_table(sql, identifier):
+    # Playground's SQL exporter writes text cells as MariaDB hex literals.
+    # Checking the INSERT associates this run's marker with its own table.
+    value = identifier.encode('ascii').hex().encode('ascii')
+    required = {
+        b'CREATE TABLE `desktop_smoke` (',
+        b"INSERT INTO `desktop_smoke` (`value`) VALUES (X'" + value + b"');",
+    }
+    overlap = max(map(len, required)) - 1
+    tail = b''
+    while chunk := sql.read(64 * 1024):
+        window = tail + chunk
+        required = {fragment for fragment in required if fragment not in window}
+        if not required:
+            return True
+        tail = window[-overlap:]
+    return False
+
+
+def exported(path, identifier):
     """Only permit shutdown once the native download is a readable site bundle."""
     try:
         with ZipFile(path) as archive:
@@ -22,8 +41,8 @@ def exported(path):
             if missing:
                 raise ValueError(f'Complete site ZIP is missing {sorted(missing)}')
             with archive.open('database.sql') as sql:
-                if not sql.read(8192).strip():
-                    raise ValueError('The exported database is empty')
+                if not contains_marker_table(sql, identifier):
+                    raise ValueError('The exported SQL is missing the desktop_smoke table or its saved marker row')
             if not archive.read('site/configuration.php').strip() or not json.loads(archive.read('export.json')):
                 raise ValueError('Exported site configuration or metadata is empty')
         return True
@@ -58,8 +77,8 @@ def exercise(binary, work, identifier, write):
     lines_seen = 0
     try:
         while True:
-            if write and not gate.exists() and exported(bundle):
-                print('Verified the delivered ZIP, Joomla configuration, SQL and export metadata.', flush=True)
+            if write and not gate.exists() and exported(bundle, identifier):
+                print('Verified the delivered ZIP, Joomla configuration, saved SQL marker and export metadata.', flush=True)
                 gate.touch()
             status = process.poll()
             lines = []

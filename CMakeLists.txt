@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 
+if(CMAKE_HOST_APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum supported macOS version")
+endif()
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" JOOMENGINE_VERSION LIMIT_COUNT 1)
 project(JoomEngine VERSION "${JOOMENGINE_VERSION}" LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
@@ -30,9 +33,6 @@ if(WIN32)
     target_link_libraries(joomengine PRIVATE choc::choc "${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib"
         ole32 oleaut32 shell32 user32 shlwapi version advapi32 userenv)
 elseif(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    if(APPLE)
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
-    endif()
     find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network WebEngineWidgets)
     add_executable(joomengine src/qt.cpp)
     target_link_libraries(joomengine PRIVATE Qt6::Widgets Qt6::Network Qt6::WebEngineWidgets)
