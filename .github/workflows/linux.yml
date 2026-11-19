@@ -61,14 +61,25 @@ jobs:
           sudo snap install --dangerous dist/packages/*.snap
           sudo snap connect joomengine:browser-sandbox :browser-support
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb xauth dbus-x11
+          sudo apt-get install -y xvfb xauth dbus-user-session
+          # snapd asks the desktop user's systemd manager to create the app's
+          # cgroup. A private dbus-run-session has no such service on hosted CI.
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@$(id -u).service"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          systemctl --user start dbus.socket
           # Both the host test process and the confined browser use these files.
           export TMPDIR="$HOME/snap/joomengine/common"
-          dbus-run-session -- xvfb-run -a node test/smoke.cjs /snap/bin/joomengine
+          systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
+            --setenv="PATH=$PATH" --setenv="TMPDIR=$TMPDIR" xvfb-run -a node test/smoke.cjs /snap/bin/joomengine
       - name: Boot, reopen and export the live JCB site inside Snap confinement
         run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
           export TMPDIR="$HOME/snap/joomengine/common"
-          dbus-run-session -- xvfb-run -a node test/smoke.cjs /snap/bin/joomengine --live
+          systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
+            --setenv="PATH=$PATH" --setenv="TMPDIR=$TMPDIR" xvfb-run -a node test/smoke.cjs /snap/bin/joomengine --live
       - uses: actions/upload-artifact@v4
         with:
           name: linux-snap
