@@ -47,16 +47,8 @@ fi
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 arch="$(uname -m)"
 case "$arch" in x86_64) arch=x64 ;; arm64) ;; *) echo "Unsupported macOS architecture: $arch" >&2; exit 1 ;; esac
-if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-  signature=(--force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY")
-  if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" ]]; then signature+=(--keychain "$APPLE_SIGNING_KEYCHAIN"); fi
-  codesign "${signature[@]}" "$app"
-else
-  codesign --force --sign - --timestamp=none "$app"
-fi
-codesign --verify --deep --strict "$app"
 mkdir -p "$temp_dir/image" dist/packages
-ditto "$app" "$temp_dir/image/JoomEngine.app"
+scripts/deploy-macos-qt.sh "$app" "$temp_dir/image/JoomEngine.app"
 ln -s /Applications "$temp_dir/image/Applications"
 name="JoomEngine-$version-macos-$arch.dmg"
 dmg="$temp_dir/$name"

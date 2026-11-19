@@ -45,13 +45,39 @@ void openExternal(const QUrl& url) {
 class WorkspaceWindow final : public QMainWindow {
 public:
     explicit WorkspaceWindow(QWebEngineProfile& profile, WorkspaceWindow* opener = nullptr)
-        : QMainWindow(opener, Qt::Window), browser(new QWebEngineView(this)),
+        : QMainWindow(opener, Qt::Window), owner(opener ? opener->owner : this), browser(new QWebEngineView(this)),
           page(new QWebEnginePage(&profile, browser)) {
         setWindowTitle(opener ? QStringLiteral("JoomEngine Tool") : QStringLiteral("JoomEngine"));
         resize(opener ? 1100 : 1400, opener ? 760 : 900);
-        if (opener) setAttribute(Qt::WA_DeleteOnClose);
+        if (opener) {
+            setAttribute(Qt::WA_DeleteOnClose);
+            setAttribute(Qt::WA_QuitOnClose, false);
+        }
         setCentralWidget(browser);
         browser->setPage(page);
+
+        auto* file = menuBar()->addMenu(tr("&File"));
+        auto* closeWindow = file->addAction(tr("Close Window"));
+        closeWindow->setShortcuts(QKeySequence::Close);
+        connect(closeWindow, &QAction::triggered, this, &QWidget::close);
+        auto* quit = file->addAction(tr("Quit JoomEngine"));
+        quit->setMenuRole(QAction::QuitRole);
+        quit->setShortcuts(QKeySequence::Quit);
+        connect(quit, &QAction::triggered, owner, &QWidget::close);
+
+        auto* edit = menuBar()->addMenu(tr("&Edit"));
+        auto addEdit = [this, edit](QWebEnginePage::WebAction action, QKeySequence::StandardKey shortcut) {
+            auto* item = page->action(action);
+            item->setShortcuts(shortcut);
+            edit->addAction(item);
+        };
+        addEdit(QWebEnginePage::Undo, QKeySequence::Undo);
+        addEdit(QWebEnginePage::Redo, QKeySequence::Redo);
+        edit->addSeparator();
+        addEdit(QWebEnginePage::Cut, QKeySequence::Cut);
+        addEdit(QWebEnginePage::Copy, QKeySequence::Copy);
+        addEdit(QWebEnginePage::Paste, QKeySequence::Paste);
+        addEdit(QWebEnginePage::SelectAll, QKeySequence::SelectAll);
 
         auto* reload = menuBar()->addMenu(tr("&View"))->addAction(tr("&Reload"));
         reload->setShortcuts(QKeySequence::Refresh);
@@ -132,6 +158,14 @@ public:
 private:
     void closeEvent(QCloseEvent* event) override {
         if (closeApproved || rendererStopped) {
+            // Once the owner has passed Chromium's beforeunload check, end all
+            // its related tool windows too, including tools launched by a tool.
+            for (auto* child : children()) {
+                if (auto* tool = dynamic_cast<WorkspaceWindow*>(child)) {
+                    tool->closeApproved = true;
+                    tool->close();
+                }
+            }
             event->accept();
             return;
         }
@@ -141,6 +175,7 @@ private:
         page->triggerAction(QWebEnginePage::RequestClose);
     }
 
+    WorkspaceWindow* owner;
     QWebEngineView* browser;
     QWebEnginePage* page;
     bool closeApproved = false;
@@ -217,7 +252,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+#ifdef JOOMENGINE_NATIVE_QA
+    // Qt initializes a named profile before applying a custom storage path.
+    // Keep that initial name separate from the real user's profile as well.
+    QWebEngineProfile profile(QStringLiteral("QA-") + serverName);
+#else
     QWebEngineProfile profile(QStringLiteral("Playground"));
+#endif
     profile.setPersistentStoragePath(QDir(data).filePath(QStringLiteral("browser")));
     profile.setCachePath(QDir(cache).filePath(QStringLiteral("browser")));
     profile.setHttpCacheType(QWebEngineProfile::DiskHttpCache);

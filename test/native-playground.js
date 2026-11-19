@@ -28,74 +28,9 @@
     const detail = { causes };
     const sqlState = sample.match(/SQLSTATE\[([A-Z0-9]{5})\]/i);
     if (sqlState) detail.sqlState = sqlState[1];
-    // PhpCgiBase._errorResponse joins a stack, STDERR and STDOUT. Safari's
-    // stack sometimes carries only Wasm function indices and JS line numbers.
-    const stack = sample.match(/Stacktrace:\s*([\s\S]*?)(?:\n={10,}|$)/i)?.[1];
-    if (stack) {
-      detail.wasmFrames = [...stack.matchAll(/(?:wasm-function\[([0-9]{1,8})\]|(?:^|\n)([0-9]{1,8})@\[wasm code\])/gi)]
-        .slice(0, 8).map(match => match[1] || match[2]);
-      detail.jsFrames = [...stack.matchAll(/\/(PhpCgi(?:Base|WebBase|Worker)\.mjs|php-worker\.mjs):([0-9]{1,8}):[0-9]{1,8}/gi)]
-        .slice(0, 5).map(match => match[1] + ':' + match[2]);
-    }
     return detail;
   }
 
-  // restoreResponse() constructs a Response for a PHP worker result. The login
-  // code reads its status and discards the body on HTTP 500. Observe that read
-  // in the QA page only. Keep requests, body streams and status values intact.
-  const errors = [];
-  const observations = [];
-  // A failed subframe navigation can become an opaque WebKit error document.
-  // Observe the owner replying to its service worker before WebKit renders it.
-  navigator.serviceWorker?.addEventListener('message', event => {
-    if (event.data?.type !== 'playground-request' || !event.ports[0]) return;
-    const url = new URL(event.data.request.url);
-    if (url.origin !== location.origin || !url.pathname.startsWith('/__site/')) return;
-    const route = /\/__adminer\/?$/.test(url.pathname) ? 'Adminer' :
-      /\/administrator\/index\.php$/.test(url.pathname) ? 'Joomla administrator' : '';
-    if (!route) return;
-    const port = event.ports[0];
-    const post = port.postMessage;
-    port.postMessage = function (value, ...rest) {
-      try {
-        if (value?.status >= 500 && !errors.some(record => record.route === route)) {
-          const bytes = new Uint8Array(value.body?.buffer ?? value.body, value.body?.byteOffset ?? 0,
-            Math.min(value.body?.byteLength ?? 0, 65536));
-          errors.push({ route, status: value.status, ...errorFacts(new TextDecoder().decode(bytes)) });
-        }
-      } catch { /* Diagnostics cannot interfere with the actual owner reply. */ }
-      return post.call(this, value, ...rest);
-    };
-  });
-  const observed = new WeakSet();
-  const descriptor = Object.getOwnPropertyDescriptor(Response.prototype, 'status');
-  if (descriptor?.configurable) Object.defineProperty(Response.prototype, 'status', { ...descriptor, get() {
-    const status = descriptor.get.call(this);
-    if (status >= 500 && !this.url && this.body && !this.bodyUsed && !observed.has(this) && errors.length < 3) {
-      observed.add(this);
-      const record = { status };
-      errors.push(record);
-      try {
-        const reader = this.clone().body?.getReader();
-        if (reader) observations.push((async () => {
-          let sample = '';
-          const decoder = new TextDecoder();
-          while (sample.length < 65536) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            sample += decoder.decode(value.subarray(0, 65536 - sample.length), { stream: true });
-          }
-          void reader.cancel().catch(() => {});
-          const title = sample.match(/<title\b[^>]*>([^<>]{1,240})<\/title>/i)?.[1];
-          const heading = sample.match(/<h1\b[^>]*>([^<>]{1,240})<\/h1>/i)?.[1];
-          if (title) record.title = safeText(title);
-          if (heading) record.heading = safeText(heading);
-          Object.assign(record, errorFacts(sample));
-        })().catch(() => {}));
-      } catch { /* A previously consumed or unavailable response has no diagnostic body. */ }
-    }
-    return status;
-  } });
   function dashboardState() {
     const frame = element('site-frame');
     const state = {
@@ -160,17 +95,22 @@
       (label === dashboardLabel || label === controlledLabel ? ' ' + diagnostics() : ''));
   }
   const dbFrame = () => document.querySelector('iframe[title="Database"]');
+  const databaseImportError = 'Failed to fetch dynamically imported module: ' + location.origin + '/src/database/host.mjs';
+  const reloadKey = 'joomengine-native-qa-reload-' + config.id;
   function adminerFailure() {
     const frame = dbFrame();
+    const feedback = element('header-feedback');
+    if (!frame && feedback?.dataset.error === 'true' && !feedback.hidden &&
+        feedback.textContent.trim() === databaseImportError) return databaseImportError;
     const doc = frame?.contentDocument;
     if (doc?.readyState !== 'complete' || !/\/__adminer\/?$/.test(doc.location.pathname)) return '';
     const status = frame.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus;
     if (!(status >= 400) && doc.contentType !== 'text/plain') return '';
     const body = doc.body?.innerText || '';
-    const feedback = [...document.querySelectorAll('#activity-log li')].slice(-3).map(node => node.textContent).join(' ');
+    const activity = [...document.querySelectorAll('#activity-log li')].slice(-3).map(node => node.textContent).join(' ');
     return 'Adminer failed to load: ' + JSON.stringify({
       route: '__adminer', status, type: doc.contentType, ready: doc.readyState, hidden: frame.hidden,
-      bodyLength: body.length, body: errorFacts(body.slice(0, 8192)), activity: errorFacts(feedback)
+      bodyLength: body.length, body: errorFacts(body.slice(0, 8192)), activity: errorFacts(activity)
     });
   }
   async function fetchRepositoryCatalog() {
@@ -302,10 +242,9 @@
       await until('export completion and its on-disk checkpoint', () => !element('export-button').disabled &&
         /^saved locally/i.test(element('save-state')?.textContent || ''), 240000);
     } else {
-      const key = 'joomengine-native-qa-reload-' + config.id;
-      const previous = sessionStorage.getItem(key);
+      const previous = sessionStorage.getItem(reloadKey);
       if (!previous) {
-        sessionStorage.setItem(key, String(performance.timeOrigin));
+        sessionStorage.setItem(reloadKey, String(performance.timeOrigin));
         signal('reload', 'Activate native View > Reload on this saved JCB project.');
         return;
       }
@@ -318,7 +257,19 @@
       await delay(400);
     }
   } catch (error) {
-    await Promise.race([Promise.allSettled(observations), delay(1000)]);
-    signal('fail', (errors.length ? 'PHP responses ' + JSON.stringify(errors) + '. ' : '') + error.message);
+    // A failed ES module import can stick to its document. Allow a single
+    // fresh document for this specific hosted GET on the first, read-only
+    // restore. The database and the independently verified native Reload
+    // must still succeed. Never retry a PHP response or a write operation.
+    const retryKey = 'joomengine-native-qa-module-retry-' + config.id;
+    const phpRestarted = [...document.querySelectorAll('#activity-log li')].some(item =>
+      item.textContent.includes('PHP restarted after an application error'));
+    if (!config.write && !phpRestarted && error.message === databaseImportError &&
+        !sessionStorage.getItem(reloadKey) && !sessionStorage.getItem(retryKey)) {
+      sessionStorage.setItem(retryKey, '1');
+      signal('retry-module', 'The hosted Database module failed to download. Reloading the saved workspace once.');
+      return;
+    }
+    signal('fail', error.message);
   }
 })();

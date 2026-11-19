@@ -14,14 +14,18 @@ CHOC is copyright Tracktion Corporation and distributed under the ISC license
 in LICENSES/CHOC-ISC.txt. Windows uses the Microsoft WebView2 SDK loader.
 Its terms are included in LICENSES/WebView2-SDK.txt.
 
-The Linux application dynamically links Qt Widgets and Qt WebEngine from
+The Linux and macOS applications dynamically link Qt Widgets and Qt WebEngine from
 The Qt Company Ltd. and other Qt contributors. JoomEngine uses these Qt
 libraries under the GNU Lesser General Public License version 3. The license
 and its incorporated GPL terms are in LICENSES/LGPL-3.0.txt and
 LICENSES/GPL-3.0.txt. Chromium and its third-party components in Qt WebEngine
 retain their respective licenses. The Linux archive uses distribution
-libraries. The Snap uses a separately installed KDE content runtime. Each
-provider supplies the corresponding Qt build and its third-party notices.
+libraries. The Snap uses a separately installed KDE content runtime. The
+Snap also includes Ubuntu's Lerc, SharpYUV and Snappy libraries. Their
+package notices are under usr/share/doc in the Snap.
+The macOS app includes Qt frameworks and Chromium resources. Its Resources
+directory contains the notices and information for obtaining the matching
+source and rebuilding with modified libraries.
 https://doc.qt.io/qt-6/qtwebengine-licensing.html
 
 Recipients may replace Qt with an interface-compatible modified build and
