@@ -59,7 +59,9 @@ jobs:
           version=$(cat VERSION)
           # This hosted Ubuntu VM matches the core24 base. Build directly on
           # the disposable runner without downloading a separate LXD OS image.
-          (cd dist/snap-project && sudo snapcraft pack --destructive-mode --output="../packages/joomengine_${version}_amd64.snap")
+          output="joomengine_${version}_amd64.snap"
+          (cd dist/snap-project && sudo snapcraft pack --destructive-mode --output="$output")
+          install -m 0644 "dist/snap-project/$output" dist/packages/
           # Keep the release output pristine. The second local Snap exercises
           # the same filesystem, native runtime and confinement with QA enabled.
           sudo install -m 0755 build-qa/joomengine dist/snap-project/prime/usr/bin/joomengine
