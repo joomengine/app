@@ -1,0 +1,66 @@
+name: Native distribution packages
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.title }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            title: Debian 13 package (amd64)
+            image: debian:trixie
+            artifact: linux-deb
+            extension: deb
+          - distro: fedora
+            title: Fedora 44 RPM (x86-64)
+            image: registry.fedoraproject.org/fedora:44
+            artifact: linux-rpm
+            extension: rpm
+          - distro: arch
+            title: Arch Linux package (x86-64)
+            image: archlinux:base
+            artifact: linux-arch
+            extension: pkg.tar.zst
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build with the target distribution
+        env:
+          IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION)
+          output="$RUNNER_TEMP/joomengine-native"
+          mkdir -p "$output"/{qa,packages}
+          git archive --prefix="joomengine-$version/" --format=tar.gz HEAD > "$output/joomengine-$version.tar.gz"
+          docker pull "$IMAGE"
+          docker run --rm -v "$PWD:/checkout:ro" -v "$output:/out" \
+            -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" "$IMAGE" \
+            bash /checkout/.github/scripts/build-native-distro.sh "$DISTRO"
+      - name: Install and test on a clean distribution
+        env:
+          IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          # Chromium creates its own renderer sandbox with Linux namespaces.
+          # Permit that on this ephemeral test VM. Keep the app unprivileged
+          # and its Chromium sandbox enabled, as on an installed desktop.
+          docker run --rm --shm-size=1g --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
+            -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP/joomengine-native:/out:ro" \
+            "$IMAGE" bash /checkout/.github/scripts/test-native-distro.sh "$DISTRO"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ runner.temp }}/joomengine-native/packages/*.${{ matrix.extension }}
+          if-no-files-found: error

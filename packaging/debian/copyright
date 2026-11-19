@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: JoomEngine
+Source: https://github.com/joomengine/joomengine
+
+Files: *
+Copyright: 2026 JoomEngine contributors
+License: Apache-2.0
+Comment: The desktop icon is JoomEngine project artwork from the Playground
+ repository. See /usr/share/licenses/joomengine/NOTICE for additional credits.
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0. You may obtain the text
+ of the license in /usr/share/common-licenses/Apache-2.0 on Debian systems.
+ The upstream copy and third-party notices are in /usr/share/licenses/joomengine.

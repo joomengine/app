@@ -1,0 +1,18 @@
+Source: joomengine
+Section: devel
+Priority: optional
+Maintainer: JoomEngine contributors <joomengine@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), cmake (>= 3.24), qt6-base-dev (>= 6.8), qt6-webengine-dev (>= 6.8)
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://playground.joomengine.org/
+Vcs-Git: https://github.com/joomengine/joomengine.git
+Vcs-Browser: https://github.com/joomengine/joomengine
+
+Package: joomengine
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libqt6webenginecore6-bin, qt6-qpa-plugins, ca-certificates
+Recommends: qt6-wayland
+Description: Desktop workspace for JoomEngine Playground and Joomla Component Builder
+ JoomEngine opens the hosted development environment with Qt WebEngine.
+ It supports persistent project storage, detached tool windows and downloads.
