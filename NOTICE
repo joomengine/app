@@ -11,8 +11,24 @@ revision 1dd95451f8a0c3fda51802f8cbf0a1e72d0fb079.
 https://github.com/joomengine/playground/blob/main/NOTICE
 
 CHOC is copyright Tracktion Corporation and distributed under the ISC license
-in LICENSES/CHOC-ISC.txt. Windows uses the Microsoft WebView2 SDK loader;
-its terms are included in LICENSES/WebView2-SDK.txt. The native webview on
-each platform is maintained by its provider. Joomla, JCB, PHP-WASM, MariaDB
-and related browser assets are provided by the hosted Playground. Their
-attributions are maintained with the Playground distribution.
+in LICENSES/CHOC-ISC.txt. Windows uses the Microsoft WebView2 SDK loader.
+Its terms are included in LICENSES/WebView2-SDK.txt.
+
+The Linux application dynamically links Qt Widgets and Qt WebEngine from
+The Qt Company Ltd. and other Qt contributors. JoomEngine uses these Qt
+libraries under the GNU Lesser General Public License version 3. The license
+and its incorporated GPL terms are in LICENSES/LGPL-3.0.txt and
+LICENSES/GPL-3.0.txt. Chromium and its third-party components in Qt WebEngine
+retain their respective licenses. The Linux archive uses distribution
+libraries. The Snap uses a separately installed KDE content runtime. Each
+provider supplies the corresponding Qt build and its third-party notices.
+https://doc.qt.io/qt-6/qtwebengine-licensing.html
+
+Recipients may replace Qt with an interface-compatible modified build and
+may reverse engineer the application to debug those library modifications.
+The CMake project and Snap packaging for rebuilding JoomEngine are available
+with the application's Apache-2.0 source.
+https://github.com/joomengine/app
+
+The hosted Playground provides Joomla, JCB, PHP-WASM, MariaDB and related
+browser assets. Their attributions are maintained with its distribution.
