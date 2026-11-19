@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify the user-facing binary opens a visible GTK window on an X11 display.
+# Verify the user-facing binary opens a visible native window on an X11 display.
 set -euo pipefail
 "$1" &
 child=$!

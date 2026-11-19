@@ -8,13 +8,13 @@ permissions:
 
 jobs:
   archive:
-    name: Linux GTK archive (x64)
-    runs-on: ubuntu-24.04
+    name: Linux Qt WebEngine archive (x64)
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install native build and display dependencies
-        run: .github/scripts/install-linux-build-deps.sh dbus-x11
+        run: .github/scripts/install-linux-build-deps.sh qt6-base-dev qt6-webengine-dev libqt6webenginecore6-bin qt6-qpa-plugins dbus-x11
       - name: Build the release and native QA binaries
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -28,7 +28,7 @@ jobs:
           tar -xzf dist/packages/*.tar.gz -C "$unpack"
           "$unpack"/JoomEngine-*/install.sh
           dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$HOME/.local/bin/joomengine"
-      - name: Exercise Playground in the native WebKitGTK engine
+      - name: Exercise hosted JCB in Qt WebEngine
         run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py build-qa/joomengine
       - uses: actions/upload-artifact@v4
         with:
@@ -37,21 +37,17 @@ jobs:
           if-no-files-found: error
 
   snap:
-    name: Native WebKitGTK Snap (amd64)
+    name: Qt WebEngine Snap (amd64)
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies on the disposable core24-compatible VM
         run: |
-          .github/scripts/install-linux-build-deps.sh dbus-user-session
+          .github/scripts/install-linux-build-deps.sh dbus-user-session libgl-dev libegl-dev libopengl-dev libxkbcommon-dev libvulkan-dev
           sudo snap install --classic snapcraft
-      - name: Build native release and QA executables
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --target joomengine --parallel
-          cmake -S . -B build-qa -DCMAKE_BUILD_TYPE=Release -DJOOMENGINE_NATIVE_QA=ON
-          cmake --build build-qa --target joomengine --parallel
+      - name: Build both executables with the KDE Qt SDK
+        run: bash .github/scripts/build-qt-snap-binaries.sh
       - name: Package the release and instrumented test Snap
         run: |
           bash scripts/prepare-snap.sh
@@ -74,14 +70,17 @@ jobs:
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           systemctl --user start dbus.socket
           sudo snap install --dangerous dist/packages/*.snap
-          test -x /snap/joomengine/current/gnome-platform/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess || \
-            test -x /snap/gnome-46-2404/current/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess
+          sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
+          sudo snap connect joomengine:browser-support
+          test -x /snap/kde-qt6-core24/current/usr/lib/qt6/libexec/QtWebEngineProcess
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
             xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
       - name: Exercise Playground in the confined native QA build
         run: |
           sudo snap remove --purge joomengine
           sudo snap install --dangerous dist/qa-snap/*.snap
+          sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
+          sudo snap connect joomengine:browser-support
           runtime="/run/user/$(id -u)"
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           tmp="$HOME/snap/joomengine/common"

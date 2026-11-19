@@ -4,13 +4,14 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 bin="$HOME/.local/bin"
 share="${XDG_DATA_HOME:-$HOME/.local/share}"
-install -d "$bin" "$share/applications" "$share/icons/hicolor/512x512/apps" "$share/joomengine/licenses"
+install -d "$bin" "$share/applications" "$share/icons/hicolor/512x512/apps" "$share/joomengine/licenses/LICENSES"
 # Atomically switch binaries so a failed copy leaves the current release usable.
 candidate=$(mktemp "$bin/.joomengine.XXXXXXXX")
 trap 'rm -f -- "$candidate"' EXIT
 install -m 0755 joomengine "$candidate"
 install -m 0644 joomengine.png "$share/icons/hicolor/512x512/apps/joomengine.png"
-install -m 0644 LICENSE NOTICE LICENSES/* "$share/joomengine/licenses/"
+install -m 0644 LICENSE NOTICE "$share/joomengine/licenses/"
+install -m 0644 LICENSES/* "$share/joomengine/licenses/LICENSES/"
 mv -fT -- "$candidate" "$bin/joomengine"
 # A graphical login may not include ~/.local/bin in PATH. Quote the executable
 # according to the desktop-entry Exec grammar, including reserved percent signs.
