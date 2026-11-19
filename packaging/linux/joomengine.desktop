@@ -6,4 +6,4 @@ Exec=joomengine
 Icon=joomengine
 Terminal=false
 Categories=Development;IDE;
-StartupWMClass=joomengine
+StartupWMClass=org.joomengine.app

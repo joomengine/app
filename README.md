@@ -1,53 +1,40 @@
 # JoomEngine
 
-JoomEngine is a desktop development workspace for [JoomEngine Playground](https://playground.joomengine.org/). Launch Joomla Component Builder, edit a running site in JoomEngine Code, inspect its MariaDB database, and export your work from one app. The default site and available Joomla, PHP, and JCB versions come from Playground's current deployment.
+JoomEngine opens [JoomEngine Playground](https://playground.joomengine.org/) in a native desktop window for Joomla Component Builder. The C++17 application uses GTK and WebKitGTK on Linux, Cocoa and WKWebView on macOS, and Win32 and Microsoft Edge WebView2 on Windows. CMake pins the CHOC headers used by the desktop build.
 
-The app opens Playground directly in a dedicated Chromium window. PHP and MariaDB run in Playground's browser workers. The desktop keeps its own persistent profile, lets the Code and database tools open detached windows, and uses the operating system's file dialogs for uploads and downloads. Opening the hosted workspace and fetching uncached assets requires a connection. See the [Playground guide](https://github.com/joomengine/playground#readme) for site persistence, backup and restoration.
+Playground delivers Joomla, JCB, its editor, PHP and MariaDB to the embedded browser. The installer contains the desktop shell. On launch the site fetches the assets needed for the selected deployment. Playground handles HTTP requests to external repositories, extension packages and APIs through its normal browser networking. The desktop shell supplies native windows, file dialogs, downloads and navigation. Each platform's web engine handles HTTPS, service workers, and the origin policies used by the site.
 
-## Install a desktop build
+## Reload and resume
 
-The [Releases page](https://github.com/joomengine/app/releases) hosts tagged builds. Pull request builds are available as artifacts on their [workflow run](https://github.com/joomengine/app/actions/workflows/desktop.yml) after the platform tests pass.
+**View → Reload** refreshes the current browser window. Use **Ctrl+R** on Windows and Linux or **Cmd+R** on macOS. JoomEngine uses persistent webview storage. Closing and reopening the app or refreshing the page reuses the same profile, so Playground can resume the last saved files and database. Its **Saved locally** indicator confirms when completed changes have reached storage. Playground’s **Download** and **Upload** actions can transfer a complete site between installations.
 
-| System | File | Installation |
+## Install
+
+Tagged builds are distributed through [GitHub Releases](https://github.com/joomengine/app/releases). Pull request builds appear under [GitHub Actions](https://github.com/joomengine/app/actions/workflows/desktop.yml) after platform checks pass.
+
+| Platform | Package | Browser engine |
 | --- | --- | --- |
-| Linux x86-64 | `.tar.gz` | Extract the archive. Run its `install.sh` with sudo for an application-menu entry and Ubuntu sandbox integration. See the [Linux instructions](packaging/linux/README.md) for portable use and updates. |
-| Linux x86-64 with snapd | `.snap` | Install the downloaded Snap and connect its browser sandbox as described in the [Linux instructions](packaging/linux/README.md#snap). |
-| Windows x64 | `.msix` | Open a signed package in App Installer. An MSIX from a build without a publisher certificate needs signing with a certificate trusted by the machine before installation. |
-| macOS Apple silicon or Intel | `.dmg` | Open the disk image for your processor and drag JoomEngine to Applications. Builds without Developer ID credentials use an ad hoc signature. Developer ID signing and notarization support normal Gatekeeper distribution. |
+| Linux x86-64 | Archive with desktop installer, or strict Snap | WebKitGTK 4.1. See the [Linux installation instructions](packaging/linux/README.md). |
+| Windows x64 | MSIX | Microsoft Edge WebView2 Evergreen Runtime. MSIX installation requires a trusted signature. |
+| macOS Apple silicon and Intel | Native DMG for each architecture | WKWebView, provided by macOS. Drag JoomEngine to Applications. |
 
-A site belongs to the profile of the installed app. Use Playground’s **Download → complete site** and **Upload** controls to move a project between installations or make a portable backup.
+## Build
 
-## Run from source
-
-Install Node.js 24 and npm, then run these commands from this repository on your desktop.
+Use CMake 3.24 or newer. The first configuration downloads checksum-pinned development dependencies. Linux requires a C++ compiler, pkg-config, GTK3 and WebKitGTK 4.1 development packages. Windows uses Visual Studio’s x64 C++ desktop tools and Windows SDK. macOS uses Xcode command-line tools.
 
 ```sh
-npm ci
-npm run stage
-npm start
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
 ```
 
-Staging downloads the pinned Electron release for the current OS and architecture. Run `npm run stage` again after changing the desktop source to refresh the staged app.
-
-## Verify the desktop runtime
-
-`npm test` checks navigation and permission decisions. The installed-app tests launch the actual binary with a disposable profile. The local HTTPS fixture exercises the service worker, shared WebAssembly memory, a detached window and its opener, exported file bytes, and browser storage across a restart. The live test launches the hosted JCB dashboard, writes and reopens a MariaDB row, detaches Adminer and downloads a complete site ZIP.
-
-For example, after installing the Linux archive, run these commands in a desktop session:
-
-```sh
-node test/smoke.cjs /usr/local/bin/joomengine
-node test/smoke.cjs /usr/local/bin/joomengine --live
-```
-
-The fixture test uses OpenSSL to create a temporary loopback certificate. The live test uses the real Playground origin and its normal TLS settings. Both leave the user's regular desktop profile alone.
+On Windows configure with `-A x64`. Run `build/joomengine` on Linux, `build/Release/JoomEngine.exe` on Windows, or `open build/JoomEngine.app` on macOS.
 
 ## Releases
 
-Set the numeric version in `package.json` and update the lockfile. A matching `vMAJOR.MINOR.PATCH` tag builds the packages, runs the installed-app tests and publishes the artifacts with SHA-256 checksums. Each installed package also runs the live JCB check. Pin updates to Electron in `config.electronVersion` so candidate runtimes go through the same tests.
+Update `VERSION` and tag the corresponding commit with `vMAJOR.MINOR.PATCH`. The release workflow collects validated packages with SHA-256 checksums.
 
-For signed Windows releases, set the repository variable `WINDOWS_PUBLISHER` to the certificate subject, and set the secrets `WINDOWS_PFX_BASE64` and `WINDOWS_PFX_PASSWORD`. For signed macOS releases, set `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD` and `APPLE_SIGNING_IDENTITY`. Add `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_SPECIFIC_PASSWORD` for notarization. These signing credentials are used only for version tags. To also publish the tested Snap to a registered Snap Store listing, set `SNAP_STORE_PUBLISH` to `true` and supply `SNAPCRAFT_STORE_CREDENTIALS`. Store auto-connection of the browser sandbox requires approval for that interface.
+Windows publisher signing uses the repository variable `WINDOWS_PUBLISHER` and secrets `WINDOWS_PFX_BASE64` and `WINDOWS_PFX_PASSWORD`. macOS Developer ID signing uses `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD` and `APPLE_SIGNING_IDENTITY`. Supply `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_SPECIFIC_PASSWORD` for notarization. Development builds use ad hoc signing on macOS and a temporary test certificate for verification of unsigned MSIX packages on CI. To also publish the Snap to its registered listing, set `SNAP_STORE_PUBLISH` to `true` and supply `SNAPCRAFT_STORE_CREDENTIALS`.
 
 ## Credits and license
 
-The [GetBible desktop app](https://github.com/getbible/desktop) inspired the focused desktop window and the multi-platform release approach. JoomEngine is an independent implementation built exclusively for [JoomEngine Playground](https://github.com/joomengine/playground). Its desktop source is licensed under [Apache-2.0](LICENSE). The Playground project supplied the pearl rocket artwork. Electron and Chromium retain their own distribution notices.
+[GetBible Desktop](https://github.com/getbible/desktop) established the C++ native-webview approach and multi-platform release model used here. JoomEngine is independently implemented and dedicated to [JoomEngine Playground](https://github.com/joomengine/playground). Its desktop source is licensed under [Apache-2.0](LICENSE). The pearl rocket is JoomEngine project artwork. Third-party attributions are listed in [NOTICE](NOTICE).

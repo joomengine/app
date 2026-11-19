@@ -12,11 +12,11 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$staged = Join-Path $root 'dist/staged'
-if (-not (Test-Path (Join-Path $staged 'JoomEngine.exe') -PathType Leaf)) {
-    throw 'The staged Windows application is missing. Run node scripts/stage.mjs first.'
+$executable = Join-Path $root 'build/Release/JoomEngine.exe'
+if (-not (Test-Path $executable -PathType Leaf)) {
+    throw 'Build the Release x64 application with CMake before packaging.'
 }
-$version = (Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
+$version = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$' -or ($version.Split('.') | Where-Object { [int]$_ -gt 65535 })) {
     throw "MSIX needs a numeric major.minor.patch version, with each component at most 65535. Found $version."
 }
@@ -30,7 +30,11 @@ if (-not $sdk) { throw 'MakeAppx was not found in the Windows 10 or 11 SDK.' }
 $work = New-Item -Type Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString()))
 try {
     $payload = Join-Path $work.FullName 'payload'
-    Copy-Item -LiteralPath $staged -Destination $payload -Recurse
+    New-Item -ItemType Directory -Path $payload | Out-Null
+    Copy-Item -LiteralPath $executable -Destination $payload
+    foreach ($notice in 'LICENSE', 'NOTICE', 'LICENSES') {
+        Copy-Item -LiteralPath (Join-Path $root $notice) -Destination $payload -Recurse
+    }
     $assets = New-Item -ItemType Directory -Path (Join-Path $payload 'Assets') -Force
     Add-Type -AssemblyName System.Drawing
     $source = [Drawing.Image]::FromFile((Join-Path $root 'assets/joomengine.png'))

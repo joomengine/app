@@ -1,50 +1,31 @@
 #!/usr/bin/env bash
+# Install or update the native desktop app for this account.
 set -euo pipefail
-if [[ $EUID != 0 ]]; then
-  echo "Run sudo ./install.sh to install JoomEngine in /opt." >&2
-  exit 1
-fi
-source_dir=$(cd -- "$(dirname -- "$0")" && pwd)
-prefix=/opt/joomengine
-install -d -m 0755 "$prefix/releases" /usr/local/bin /usr/local/share/applications /usr/local/share/icons/hicolor/512x512/apps
-umask 022
-exec 9>"$prefix/.install.lock"
-flock -x 9
-previous=$(readlink -- "$prefix/current" || true)
-# Build privately, then switch the complete installation in one rename.
-release=$(mktemp -d "$prefix/releases/build.XXXXXXXX")
-cleanup() {
-  rm -f -- "$release.link"
-  if [[ $(readlink -- "$prefix/current" || true) != "$release" ]]; then
-    rm -rf -- "$release"
-  fi
-}
-trap cleanup EXIT
-cp -R -- "$source_dir/app/." "$release/"
-# The Linux distribution needs only regular files and directories. Reject
-# links to resources in the user's extraction directory before granting this
-# install access to Chromium's user-namespace sandbox.
-if [[ -n $(find "$release" ! -type d ! -type f -print -quit) ]]; then
-  echo "The Linux payload contains a link or special file." >&2
-  exit 1
-fi
-chmod -R a-s,go-w "$release"
-chmod 0755 "$release"
-test -x "$release/joomengine"
-if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
-  install -m 0644 "$source_dir/joomengine.apparmor" /etc/apparmor.d/joomengine
-  apparmor_parser -r /etc/apparmor.d/joomengine
-fi
-install -m 0644 "$source_dir/joomengine.png" /usr/local/share/icons/hicolor/512x512/apps/joomengine.png
-install -m 0644 "$source_dir/joomengine.desktop" /usr/local/share/applications/joomengine.desktop
-ln -sfnT "$prefix/current/joomengine" /usr/local/bin/joomengine
-ln -s "$release" "$release.link"
-mv -Tf -- "$release.link" "$prefix/current"
-
-# Keep the previous release available to processes finishing an upgrade.
-for older in "$prefix"/releases/build.*; do
-  if [[ -d $older && $older != "$release" && $older != "$previous" ]]; then
-    rm -rf -- "$older"
-  fi
-done
-echo "Installed JoomEngine. Start it from the applications menu or run joomengine."
+cd -- "$(dirname -- "$0")"
+bin="$HOME/.local/bin"
+share="${XDG_DATA_HOME:-$HOME/.local/share}"
+install -d "$bin" "$share/applications" "$share/icons/hicolor/512x512/apps" "$share/joomengine/licenses"
+# Atomically switch binaries so a failed copy leaves the current release usable.
+candidate=$(mktemp "$bin/.joomengine.XXXXXXXX")
+trap 'rm -f -- "$candidate"' EXIT
+install -m 0755 joomengine "$candidate"
+install -m 0644 joomengine.png "$share/icons/hicolor/512x512/apps/joomengine.png"
+install -m 0644 LICENSE NOTICE LICENSES/* "$share/joomengine/licenses/"
+mv -fT -- "$candidate" "$bin/joomengine"
+# A graphical login may not include ~/.local/bin in PATH. Quote the executable
+# according to the desktop-entry Exec grammar, including reserved percent signs.
+python3 - "$bin/joomengine" "$share/applications/org.joomengine.app.desktop" <<'PY'
+from pathlib import Path
+import os
+import sys
+import tempfile
+executable, destination = sys.argv[1:]
+arg = ''.join(('\\' + c if c in '\\"$`' else '%%' if c == '%' else c) for c in executable)
+arg = arg.replace('\\', '\\\\')
+text = Path('joomengine.desktop').read_text().replace('Exec=joomengine\n', f'Exec="{arg}"\n')
+with tempfile.NamedTemporaryFile(mode='w', dir=Path(destination).parent, delete=False) as f:
+    f.write(text)
+os.chmod(f.name, 0o644)
+os.replace(f.name, destination)
+PY
+echo "Installed JoomEngine in $bin. Open it from the applications menu."

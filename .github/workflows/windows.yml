@@ -17,11 +17,28 @@ jobs:
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm ci
-      - run: node scripts/stage.mjs
+      - name: Build the native x64 application
+        run: |
+          cmake -S . -B build -A x64
+          cmake --build build --config Release --target joomengine
+      - name: Ensure the Microsoft Evergreen WebView2 runtime is available
+        shell: pwsh
+        run: |
+          $client = 'Microsoft/EdgeUpdate/Clients/{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $keys = @("HKLM:/SOFTWARE/WOW6432Node/$client", "HKCU:/SOFTWARE/$client")
+          $installed = $keys | ForEach-Object {
+            Get-ItemPropertyValue -LiteralPath $_ -Name pv -ErrorAction SilentlyContinue
+          } | Where-Object { [version]$_ -gt [version]'0.0.0.0' }
+          if (-not $installed) {
+            $setup = Join-Path $env:RUNNER_TEMP 'WebView2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup
+            $signature = Get-AuthenticodeSignature -LiteralPath $setup
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+              throw 'The WebView2 bootstrapper signature is invalid.'
+            }
+            $process = Start-Process $setup -ArgumentList '/silent', '/install' -PassThru -Wait
+            if ($process.ExitCode -ne 0) { throw "WebView2 Evergreen setup failed ($($process.ExitCode))." }
+          }
       - name: Build the x64 MSIX
         shell: pwsh
         env:
@@ -39,11 +56,16 @@ jobs:
           } finally {
             if (Test-Path $pfx) { Remove-Item -LiteralPath $pfx -Force }
           }
-      - name: Install the MSIX and exercise the desktop and live JCB site
+      - name: Install and launch the production MSIX
         shell: powershell
         run: |
           $msix = Get-Item 'dist/packages/*.msix'
           ./packaging/windows/test-package.ps1 -PackagePath $msix.FullName
+      - name: Exercise the native WebView2 host with the live JCB site
+        run: |
+          cmake -S . -B build-qa -A x64 -DJOOMENGINE_NATIVE_QA=ON
+          cmake --build build-qa --config Release --target joomengine
+          python test/native_smoke.py build-qa/Release/JoomEngine.exe
       - uses: actions/upload-artifact@v4
         with:
           name: windows-msix

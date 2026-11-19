@@ -6,4 +6,4 @@ Exec=joomengine
 Icon=${SNAP}/meta/gui/icon.png
 Terminal=false
 Categories=Development;IDE;
-StartupWMClass=joomengine
+StartupWMClass=org.joomengine.app
