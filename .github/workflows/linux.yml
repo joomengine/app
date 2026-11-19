@@ -1,0 +1,71 @@
+name: Linux packages
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    name: Linux archive (x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: node scripts/stage.mjs
+      - run: bash scripts/package-linux.sh
+      - name: Install the archive and test the installed application
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb xauth dbus-x11 libgtk-3-0t64 libnss3 libasound2t64 libgbm1
+          unpack=$(mktemp -d)
+          tar -xzf dist/packages/*.tar.gz -C "$unpack"
+          sudo "$unpack"/JoomEngine-*/install.sh
+          dbus-run-session -- xvfb-run -a node test/smoke.cjs /usr/local/bin/joomengine
+      - name: Boot the live JCB site, reopen it and export it
+        run: dbus-run-session -- xvfb-run -a node test/smoke.cjs /usr/local/bin/joomengine --live
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-archive
+          path: dist/packages/*.tar.gz
+          if-no-files-found: error
+
+  snap:
+    name: Strictly confined Snap (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: node scripts/stage.mjs
+      - run: bash scripts/prepare-snap.sh
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        with:
+          path: dist/snap-project
+        id: build
+      - name: Install the local build and test the confined application
+        env:
+          SNAP_PACKAGE: ${{ steps.build.outputs.snap }}
+        run: |
+          mkdir -p dist/packages "$HOME/snap/joomengine/common"
+          cp -- "$SNAP_PACKAGE" dist/packages/
+          sudo snap install --dangerous dist/packages/*.snap
+          sudo snap connect joomengine:browser-sandbox :browser-support
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb xauth dbus-x11
+          # Both the host test process and the confined browser use these files.
+          export TMPDIR="$HOME/snap/joomengine/common"
+          dbus-run-session -- xvfb-run -a node test/smoke.cjs /snap/bin/joomengine
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-snap
+          path: dist/packages/*.snap
+          if-no-files-found: error

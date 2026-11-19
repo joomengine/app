@@ -1,0 +1,50 @@
+name: joomengine
+title: JoomEngine
+base: core24
+adopt-info: application
+summary: Build Joomla extensions with JoomEngine Playground
+description: |
+  Run the JCB development workspace on your desktop with persistent sites,
+  detached tool windows and project downloads.
+website: https://playground.joomengine.org/
+source-code: https://github.com/joomengine/app
+issues: https://github.com/joomengine/app/issues
+license: Apache-2.0
+grade: stable
+confinement: strict
+platforms:
+  amd64:
+
+plugs:
+  browser-sandbox:
+    interface: browser-support
+    allow-sandbox: true
+
+parts:
+  application:
+    plugin: dump
+    source: payload
+    override-pull: |
+      craftctl default
+      craftctl set version="$(cat "$CRAFT_PROJECT_DIR/VERSION")"
+    stage-packages:
+      - libasound2t64
+      - libnspr4
+      - libnss3
+      - libsecret-1-0
+      - libxss1
+
+apps:
+  joomengine:
+    command: opt/joomengine/joomengine
+    extensions: [gnome]
+    plugs:
+      - audio-playback
+      - browser-sandbox
+      - home
+      - network
+      - network-bind
+    environment:
+      XDG_CONFIG_HOME: $SNAP_USER_COMMON/.config
+      XDG_CACHE_HOME: $SNAP_USER_COMMON/.cache
+      XDG_DATA_HOME: $SNAP_USER_COMMON/.local/share

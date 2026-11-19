@@ -18,7 +18,7 @@
   "scripts": {
     "stage": "node scripts/stage.mjs",
     "start": "node scripts/start.mjs",
-    "test": "node --test"
+    "test": "node --test test/policy.test.cjs"
   },
   "devDependencies": {
     "@electron/osx-sign": "2.7.2",

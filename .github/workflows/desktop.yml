@@ -1,0 +1,94 @@
+name: JoomEngine desktop
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Runtime policy and release version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm test
+      - name: Check tag against package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          [[ "$GITHUB_REF_NAME" == "v$version" ]]
+
+  linux:
+    needs: checks
+    uses: ./.github/workflows/linux.yml
+
+  windows:
+    needs: checks
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+
+  macos:
+    needs: checks
+    uses: ./.github/workflows/macos.yml
+    secrets: inherit
+
+  release:
+    name: Publish the tested installers
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Publish release files and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd packages
+          shopt -s nullglob
+          assets=(*.tar.gz *.snap *.msix *-arm64.dmg *-x64.dmg)
+          [[ ${#assets[@]} -eq 5 ]]
+          sha256sum "${assets[@]}" > SHA256SUMS
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --verify-tag \
+              --title "JoomEngine ${GITHUB_REF_NAME#v}" --generate-notes "${assets[@]}" SHA256SUMS
+          fi
+
+  snap-store:
+    name: Publish stable Snap
+    if: vars.SNAP_STORE_PUBLISH == 'true'
+    needs: release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-snap
+          path: packages
+      - name: Locate tested Snap
+        id: snap
+        run: |
+          shopt -s nullglob
+          snaps=(packages/*.snap)
+          [[ ${#snaps[@]} -eq 1 ]]
+          echo "path=${snaps[0]}" >> "$GITHUB_OUTPUT"
+      - uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap.outputs.path }}
+          release: stable

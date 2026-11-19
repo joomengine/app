@@ -1,0 +1,79 @@
+name: macOS disk images
+
+on:
+  workflow_call:
+    secrets:
+      APPLE_CERTIFICATE_BASE64:
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_SIGNING_IDENTITY:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: macOS DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: Stage the native application
+        run: npm run stage
+      - name: Package disk image
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_CERTIFICATE_BASE64 || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_ID || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+        run: bash scripts/package-macos.sh
+      - name: Copy JoomEngine from its disk image and launch it
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          image=(dist/packages/*.dmg)
+          [[ "${#image[@]}" == 1 ]]
+          mount="$RUNNER_TEMP/JoomEngine volume"
+          install="$RUNNER_TEMP/Installed apps"
+          mkdir -p "$mount" "$install"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "${image[0]}"
+          trap 'hdiutil detach "$mount"' EXIT
+          ditto "$mount/JoomEngine.app" "$install/JoomEngine.app"
+          hdiutil detach "$mount"
+          trap - EXIT
+          app="$install/JoomEngine.app"
+          codesign --verify --deep --strict "$app"
+          binary="$app/Contents/MacOS/JoomEngine"
+          arch="$EXPECTED_ARCH"
+          if [[ "$arch" == x64 ]]; then arch=x86_64; fi
+          lipo -verify_arch "$arch" "$binary"
+          node test/smoke.cjs "$binary"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg-${{ matrix.arch }}
+          path: dist/packages/*.dmg
+          if-no-files-found: error
+          compression-level: 0
