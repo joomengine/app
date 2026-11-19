@@ -76,7 +76,23 @@ jobs:
           sudo snap install --dangerous dist/packages/*.snap
           sudo snap connect joomengine:kde-qt6-core24 kde-qt6-core24:kde-qt6-core24
           sudo snap connect joomengine:browser-support
-          test -x /snap/kde-qt6-core24/current/usr/lib/qt6/libexec/QtWebEngineProcess
+          # A Snapped shell uses the same command chain, base and providers
+          # as the installed binary. The build VM can have extra libraries.
+          systemd-run --user --wait --pipe --collect --quiet xvfb-run -a snap run --shell joomengine -c '
+            set -eu
+            failed=0
+            for object in "$SNAP/usr/bin/joomengine" "$QTWEBENGINEPROCESS_PATH" \
+              "$SNAP_DESKTOP_RUNTIME"/usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libq{xcb,wayland}.so; do
+              test -f "$object"
+              libraries=$(LD_TRACE_LOADED_OBJECTS=1 /lib64/ld-linux-x86-64.so.2 "$object")
+              if [[ "$libraries" == *"=> not found"* ]]; then
+                echo "$object has unresolved libraries:"
+                echo "$libraries" | grep "=> not found"
+                failed=1
+              fi
+            done
+            exit "$failed"
+          '
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
             xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
       - name: Exercise Playground in the confined native QA build

@@ -25,9 +25,19 @@ parts:
   application:
     plugin: dump
     source: payload
-    # The Qt content provider links to these Noble libraries but leaves them
-    # to consumers. They are needed by Chromium and image format plugins.
-    stage-packages: [liblerc4, libsharpyuv0, libsnappy1v5]
+    # Complete the shared Qt runtime's networking, XCB and image dependencies.
+    # The strict base has a smaller set of libraries than the build SDK.
+    stage-packages:
+      - libfribidi0
+      - liblerc4
+      - libnghttp2-14
+      - libpsl5t64
+      - librtmp1
+      - libsasl2-2
+      - libsharpyuv0
+      - libsnappy1v5
+      - libssh-4
+      - libxcb-shape0
     override-pull: |
       craftctl default
       craftctl set version="$(cat "$CRAFT_PROJECT_DIR/VERSION")"
