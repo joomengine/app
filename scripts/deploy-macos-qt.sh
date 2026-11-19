@@ -27,8 +27,8 @@ framework="$output_app/Contents/Frameworks/QtWebEngineCore.framework"
 helper="$framework/Helpers/QtWebEngineProcess.app"
 entitlements="$helper/Contents/Resources/QtWebEngineProcess.entitlements"
 test -s "$entitlements"
-lipo -verify_arch "$arch" "$framework/QtWebEngineCore"
-lipo -verify_arch "$arch" "$helper/Contents/MacOS/QtWebEngineProcess"
+lipo "$framework/QtWebEngineCore" -verify_arch "$arch"
+lipo "$helper/Contents/MacOS/QtWebEngineProcess" -verify_arch "$arch"
 test -s "$framework/Resources/qtwebengine_resources.pak"
 
 signature=(--force --sign "${APPLE_SIGNING_IDENTITY:--}")

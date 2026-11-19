@@ -263,6 +263,9 @@ int main(int argc, char** argv) {
     profile.setCachePath(QDir(cache).filePath(QStringLiteral("browser")));
     profile.setHttpCacheType(QWebEngineProfile::DiskHttpCache);
     profile.settings()->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
+    // Playground's Copy share URL calls writeText() from a user click.
+    // JavascriptCanPaste stays off so scripted clipboard reads require permission.
+    profile.settings()->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
     QObject::connect(&profile, &QWebEngineProfile::downloadRequested, &profile, saveDownload);
 
     // All pages are destroyed before their disk-backed browser profile.
