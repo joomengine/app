@@ -1,29 +1,19 @@
 # Publish JoomEngine for Linux
 
-The desktop workflow publishes the tested Linux packages and their SHA-256 checksums on GitHub. Store registration is independent. Enable the channels you maintain after completing their setup. The publisher reads the files back from the completed, versioned GitHub Release and verifies their checksums. The AUR builds from that version's source tag. [GitHub Releases](https://github.com/joomengine/joomengine/releases) · [Linux publication workflow](../.github/workflows/linux-publish.yml)
+GitHub Releases provides JoomEngine’s tested Linux packages and SHA-256 checksums. To get a listing in a distribution or store, follow its own admission process below. [Project downloads](https://github.com/joomengine/joomengine/releases) · [Release procedure](releases.md)
 
-Choose one route for entering the settings. The **browser route** below uses GitHub Settings and copy/paste. For the **command-line route**, complete [GitHub CLI setup](publishing.md#github-cli-setup) once, then jump to [Snap commands](#snap-store-from-the-command-line), [Debian and Fedora commands](#debian-and-fedora-from-the-command-line), or [Arch commands](#aur-from-the-command-line). Both routes use the same scopes and names in the table below.
-
-## GitHub settings in the browser
-
-Sign in to GitHub in your browser with access to manage this repository's settings. Each publisher uses the following two pages.
-
-1. Open **Settings → Environments**, select **distribution**, or choose **New environment** and enter `distribution` if it does not yet exist. Under **Deployment branches and tags**, choose **Selected branches and tags** and add a **tag** rule for `v*`. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
-2. On the **distribution** page, under **Environment secrets**, click **Add secret**. Enter the exact **Name** from the table, paste its credential in **Value**, and click **Add secret**. To rotate an existing secret, use its edit button and replace its value. Under **Environment variables**, use **Add variable**, enter the **Name** and **Value**, then click **Add variable**. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
-3. For each switch, open **Settings → Secrets and variables → Actions → Variables**. Click **New repository variable**, enter the switch in **Name**, enter the lowercase text `true` in **Value**, and click **Add variable**. Enable the switch after its channel's credentials and settings are saved. GitHub evaluates these switches before attaching the environment. [Open JoomEngine repository variables](https://github.com/joomengine/joomengine/settings/variables/actions)
-
-| Channel | Repository switch | Variables in `distribution` | Secrets in `distribution` |
-| --- | --- | --- | --- |
-| Snap Store, latest/candidate → latest/stable | `SNAP_STORE_PUBLISH` | None | `SNAPCRAFT_STORE_CREDENTIALS` |
-| Debian 13 APT | `DEBIAN_REPO_PUBLISH` | `CLOUDSMITH_NAMESPACE`, `CLOUDSMITH_REPOSITORY` | `CLOUDSMITH_API_KEY` |
-| Fedora 44 RPM | `RPM_REPO_PUBLISH` | Same two Cloudsmith variables | Same Cloudsmith key |
-| Arch User Repository | `AUR_PUBLISH` | `AUR_MAINTAINER_EMAIL`, `AUR_KNOWN_HOSTS` | `AUR_SSH_PRIVATE_KEY` |
-| GitHub AppImage, Flatpak bundle, Linux archive and other binaries | Automatic for release builds | None | None |
-| Flathub and AppImageHub | External catalog setup below | None | None |
+| Destination | Who publishes the package | Settings in this GitHub repository |
+| --- | --- | --- |
+| [Snap Store](#snap-store) | The release workflow tests a Store candidate and promotes it to stable. | Repository variable `SNAP_STORE_PUBLISH=true` and environment secret `distribution` → `SNAPCRAFT_STORE_CREDENTIALS`. [Browser setup](#snap-store) · [CLI setup](#snap-store-from-the-command-line) |
+| [Debian archive](#debian-archive) | A Debian uploader or sponsor submits the package for archive review. | None |
+| [Fedora Linux](#fedora-linux) | An approved Fedora packager builds in Koji and submits release updates in Bodhi. | None |
+| [Arch Linux extra](#arch-linux-extra) | An Arch packager admits and maintains the package. | None |
+| [Flathub](#flatpak-and-flathub) | A project maintainer submits the manifest to Flathub. Flathub builds and publishes it after acceptance. | None |
+| [JoomEngine downloads](#project-downloads) | GitHub Actions publishes direct downloads, including the AppImage and Linux archive. | Built-in Actions token |
 
 ## Snap Store
 
-1. Sign into Ubuntu One, register the public snap name **joomengine**, and complete its listing under your publisher account. An existing owner can add the uploader as a collaborator. [Ubuntu One](https://login.ubuntu.com/) · [Register a snap](https://snapcraft.io/account/register-snap) · [Publisher dashboard](https://snapcraft.io/snaps)
+1. Sign in to Ubuntu One, register the public snap name **joomengine**, and complete its listing under your publisher account. An existing owner can add the uploader as a collaborator. [Ubuntu One](https://login.ubuntu.com/) · [Register a snap](https://snapcraft.io/account/register-snap) · [Publisher dashboard](https://snapcraft.io/snaps)
 2. Request Store review for the `browser-support` plug with `allow-sandbox: true` and automatic connection of this plug and `hardware-observe`. Explain that Chromium starts its own renderer sandbox and Qt reads PCI graphics-device information during startup. Supply the snap name, manifest and strict-confinement test from this repository. Canonical controls declaration approval and automatic connections. [Privileged interfaces request form and category](https://forum.snapcraft.io/c/store-requests/privileged-interfaces/27) · [Snap manifest](../snap/snapcraft.yaml)
 3. On an Ubuntu workstation, generate the publisher credential. Run these commands in one terminal. Snapcraft prompts for the Ubuntu One publisher login. The export writes the credential into a private temporary directory, scopes it to `joomengine` on `latest/candidate` and `latest/stable`, and sets expiry to 90 days. The final command opens the directory in the Linux file manager. [Snapcraft export-login](https://documentation.ubuntu.com/snapcraft/stable/reference/commands/export-login/) · [Publisher permissions](https://github.com/snapcore/action-publish#store-login)
 
@@ -40,7 +30,7 @@ Sign in to GitHub in your browser with access to manage this repository's settin
    xdg-open "$credential_dir"
    ```
 
-4. Open **snap-login.txt** in a local plain-text editor. Use **Select All → Copy**. The **entire exported file** is the secret value. Preserve its encoding and line breaks exactly as generated. In GitHub, open **Settings → Environments → distribution → Environment secrets → Add secret**. Enter `SNAPCRAFT_STORE_CREDENTIALS` in **Name**, paste into **Value**, and click **Add secret**. If replacing a stable-only credential, edit the existing secret and paste the newly exported contents. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
+4. Open GitHub **Settings → Environments** and select `distribution`. If needed, create that environment. If deployment rules restrict tags, allow your stable `v*` tags. Open **snap-login.txt** in a local plain-text editor. Use **Select All → Copy**. The **entire exported file** is the secret value. Preserve its encoding and line breaks exactly as generated. In GitHub, open **Settings → Environments → distribution → Environment secrets → Add secret**. Enter `SNAPCRAFT_STORE_CREDENTIALS` in **Name**, paste into **Value**, and click **Add secret**. If replacing a stable-only credential, edit the existing secret and paste the newly exported contents. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
 5. Check that `SNAPCRAFT_STORE_CREDENTIALS` appears under **Environment secrets**. GitHub shows the name and update time and conceals the saved value. Close the editor, clear the clipboard and any clipboard-history entry, and remove the temporary file from the same terminal. This procedure leaves the credential out of shell history and terminal output.
 
    ```bash
@@ -56,7 +46,7 @@ A skipped Store job is expected for a pull request, a main build, a disabled swi
 
 ### Snap Store from the command line
 
-Register the snap under the correct publisher and request its interface approvals as described in steps 1–2 above. Complete the [GitHub CLI setup](publishing.md#github-cli-setup) with an administrator account. It confirms your GitHub login and explains how to create the `distribution` environment exists while preserving existing deployment approvals and tag rules.
+Register the snap under the correct publisher and request its interface approvals as described in steps 1–2 above. Complete the [GitHub CLI setup](publishing.md#github-cli-setup) with an administrator account. It verifies the active GitHub account and shows how to create `distribution` if needed.
 
 Run this independent block in Bash on Ubuntu. It creates a new Snapcraft credential, sends the entire file to GitHub over standard input, and enables the repository switch only after saving the environment secret. It also works when replacing an older stable-only credential. Its temporary file is removed after the block finishes.
 
@@ -82,132 +72,36 @@ Run this independent block in Bash on Ubuntu. It creates a new Snapcraft credent
 
 Confirm that the secret name is listed and the switch reads `true`. Renew the token before its 90-day expiry by repeating this block. After a tagged release, `snapcraft status joomengine` shows the candidate and stable revisions. If the first upload needs Canonical review, complete that review with the publisher before retrying the failed job. [Snap Store registration](https://snapcraft.io/account/register-snap) · [Snap Store publisher dashboard](https://snapcraft.io/snaps)
 
-## Debian APT and Fedora RPM
+## Debian archive
 
-Both jobs can use one public Cloudsmith repository. Cloudsmith hosts and signs the APT/RPM repository metadata and provides repository-specific installation instructions. The Debian job uploads the Debian 13 (trixie) amd64 build. The RPM job uploads the Fedora 44 x86-64 build.
+1. Search the archive and the list of prospective packages for **joomengine**. Coordinate with the existing maintainer if there is already a package or an open request. Otherwise run `reportbug wnpp`, choose **ITP**, and provide the project URL, Apache-2.0 license and a short description. Debian also accepts a plain-text ITP by email using the WNPP instructions. Keep the assigned bug number. [Package search](https://packages.debian.org/) · [WNPP and ITP instructions](https://www.debian.org/devel/wnpp/)
+2. From a tagged JoomEngine source release, prepare a Debian source package for **unstable**. Start with the project's Debian packaging, use a monitored maintainer address, and record the ITP bug number in the first changelog entry. The CI changelog template targets Debian 13 (`trixie`) for the downloadable binary. Set the archive submission's suite, version and changelog explicitly. Build from the source package in a clean unstable environment and check it with Lintian. [JoomEngine packaging](../packaging/debian/) · [Debian Maintainer Guide](https://www.debian.org/doc/manuals/debmake-doc/) · [New package procedure](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html#new-packages)
+3. If you need a sponsor, register a **Maintainer** account on Debian Mentors and add your public OpenPGP key. Sign the source upload locally and send its `_source.changes` using the Mentors `dput` configuration. On the uploaded package's page, select **Needs a sponsor** and send the generated request to the `sponsorship-requests` bug tracker. A sponsor reviews it with you. [Register on Mentors](https://mentors.debian.net/accounts/register/) · [Signing, upload and sponsorship instructions](https://mentors.debian.net/intro-maintainers/)
+4. The authorized uploader submits the initial source **and matching binaries** for Debian’s NEW review. Track it in the NEW queue, then on the Debian Package Tracker. Later versions normally use source-only uploads to unstable and follow Debian's testing migration rules. Getting an update into an existing stable release follows Debian's stable-update or backports policies. The signing key stays with the Debian uploader. [Upload rules](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html#source-and-binary-uploads) · [NEW queue](https://ftp-master.debian.org/new.html) · [Debian Package Tracker](https://tracker.debian.org/) · [Backports](https://backports.debian.org/Contribute/)
 
-1. Sign in to Cloudsmith, create or select a workspace, and create a **public** package repository. In that repository open **Push/Pull Packages**. Its upload destination identifies the workspace slug and repository slug. Keep duplicate-version replacement disabled to preserve existing releases. [Cloudsmith login](https://app.cloudsmith.com/login) · [Workspaces](https://app.cloudsmith.com/workspaces) · [Package upload](https://docs.cloudsmith.com/artifact-management/package-upload)
-2. Open the workspace's **Accounts → Services**, create a release service account, and copy its API key when Cloudsmith displays it. Under the repository's **Settings → Access control**, grant this service **Write** access to the package repository. [Service accounts](https://docs.cloudsmith.com/accounts-and-teams/service-accounts) · [Repository privileges](https://docs.cloudsmith.com/repositories/repository-privileges)
-3. Open GitHub **Settings → Environments → distribution**. Under **Environment secrets → Add secret**, enter `CLOUDSMITH_API_KEY` in **Name**, paste the complete service API key in **Value**, and save. Clear the clipboard. Under **Environment variables → Add variable**, add `CLOUDSMITH_NAMESPACE` with the workspace slug and `CLOUDSMITH_REPOSITORY` with the repository slug. Save each variable separately. Both package jobs use these same three entries. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
-4. Under **Actions → Variables → New repository variable**, add `DEBIAN_REPO_PUBLISH` with value `true` for APT, `RPM_REPO_PUBLISH` with value `true` for RPM, or both as separate entries. [Open JoomEngine repository variables](https://github.com/joomengine/joomengine/settings/variables/actions)
-5. After a tagged release, open the Cloudsmith repository's **Packages** view and verify the package is synced in `debian/trixie` or `fedora/44`. Its Cloudsmith tag contains its GitHub release digest. A repeated upload recognizes an already synced package. You can inspect and resync a failed upload in this same view. [Cloudsmith package management](https://docs.cloudsmith.com/artifact-management/package-upload)
-6. Open **Push/Pull Packages → Debian** or **RPM** in the repository. Copy its public setup URL and signing-key fingerprint into your announcement. On a clean system follow those signed-repository instructions, then use `sudo apt update && sudo apt install joomengine` on Debian or `sudo dnf install joomengine` on Fedora. [APT setup and signing](https://docs.cloudsmith.com/formats/debian-repository) · [RPM setup and signing](https://docs.cloudsmith.com/formats/redhat-repository)
+## Fedora Linux
 
-### Debian and Fedora from the command line
+1. Search Fedora Packages and existing Package Review tickets for **joomengine**. Register a Fedora account, complete the contributor agreement, and follow the packager onboarding instructions. Use the same email address for Fedora and Red Hat Bugzilla. A first-time packager needs an approved sponsor. [Package search](https://packages.fedoraproject.org/) · [Fedora Accounts](https://accounts.fedoraproject.org/) · [Join the package maintainers](https://docs.fedoraproject.org/en-US/package-maintainers/Joining_the_Package_Maintainers/)
+2. Prepare a standalone spec and source RPM (SRPM) for the tagged JoomEngine release. CI supplies `project_version` to the project's spec on the command line. For Fedora review, ensure the spec resolves the real version and tagged sources on its own. Test a clean Rawhide rebuild with Mock. Open a **Package Review** in Bugzilla and provide publicly downloadable links to both the spec and SRPM. Request sponsorship in the ticket if needed. [JoomEngine spec](../packaging/rpm/joomengine.spec) · [Review request form](https://bugzilla.redhat.com/enter_bug.cgi?product=Fedora&format=fedora-review) · [Fedora review procedure](https://docs.fedoraproject.org/en-US/package-maintainers/Package_Review_Process/)
+3. After approval and sponsorship, use the current `fedpkg request-repo` with the package name and review ID to request the official dist-git repository. Request the supported release branches you will maintain. Import the reviewed packaging and source into Fedora's repository, then use `fedpkg build` to start its Koji build. [New-package process](https://docs.fedoraproject.org/en-US/package-maintainers/New_Package_Process_for_New_Contributors/) · [Koji build status](https://koji.fedoraproject.org/koji/)
+4. For released Fedora branches, submit the successful build in Bodhi using its web interface or `fedpkg update`. Follow testing and gating until it reaches stable. For subsequent upstream versions, the Fedora maintainer updates dist-git, rebuilds in Koji, and submits the relevant updates. The maintainer authenticates to Fedora with their own account. [Bodhi](https://bodhi.fedoraproject.org/) · [Package update guide](https://docs.fedoraproject.org/en-US/package-maintainers/Package_Update_Guide/)
 
-Create the public Cloudsmith repository and grant its release service account **Write** as described in steps 1–2 above. Have its API key ready, and complete the [GitHub CLI setup](publishing.md#github-cli-setup). From an interactive Bash terminal, enter the two public slugs when prompted. When `gh secret set` prompts for the secret, paste the Cloudsmith service API key and press Enter. The value goes directly to the hidden secret prompt. Choose the formats you want to enable.
+## Arch Linux extra
 
-```bash
-(
-  set -euo pipefail
-  repo=joomengine/joomengine
-  gh api --silent "repos/$repo/environments/distribution"
-  read -r -p 'Cloudsmith workspace slug: ' workspace
-  read -r -p 'Cloudsmith public repository slug: ' packages
-  [[ "$workspace" =~ ^[a-zA-Z0-9_-]+$ && "$packages" =~ ^[a-zA-Z0-9_-]+$ ]]
-  read -r -p 'Enable which package feeds (deb, rpm, or both)? ' feeds
-  case "$feeds" in deb|rpm|both) ;; *) echo "Choose deb, rpm, or both." >&2; exit 1 ;; esac
-  gh secret set CLOUDSMITH_API_KEY --repo "$repo" --env distribution
-  gh variable set CLOUDSMITH_NAMESPACE --repo "$repo" --env distribution --body "$workspace"
-  gh variable set CLOUDSMITH_REPOSITORY --repo "$repo" --env distribution --body "$packages"
-  if [[ "$feeds" == deb || "$feeds" == both ]]; then
-    gh variable set DEBIAN_REPO_PUBLISH --repo "$repo" --body true
-    gh api "repos/$repo/actions/variables/DEBIAN_REPO_PUBLISH" --jq .value
-  fi
-  if [[ "$feeds" == rpm || "$feeds" == both ]]; then
-    gh variable set RPM_REPO_PUBLISH --repo "$repo" --body true
-    gh api "repos/$repo/actions/variables/RPM_REPO_PUBLISH" --jq .value
-  fi
-  gh secret list --repo "$repo" --env distribution
-  gh api "repos/$repo/environments/distribution/variables/CLOUDSMITH_NAMESPACE" --jq .value
-  gh api "repos/$repo/environments/distribution/variables/CLOUDSMITH_REPOSITORY" --jq .value
-)
-```
-
-Check the two returned slugs, the service key's name, and a `true` result for each selected feed. The other feed retains its previous setting. Confirm the synced package in Cloudsmith after the next tagged release. [Cloudsmith workspaces](https://app.cloudsmith.com/workspaces)
-
-### Official distribution archives
-
-Debian's archive accepts reviewed source packages. A Debian maintainer checks for an existing package or request, files an Intent To Package, prepares a Debian Policy-compliant source package for unstable, uploads it to mentors if sponsorship is needed and files a Request For Sponsorship. A sponsor submits it to the Debian NEW queue for archive review. No GitHub credential grants this admission. [Debian WNPP](https://www.debian.org/devel/wnpp/) · [Debian Mentors](https://mentors.debian.net/intro-maintainers/) · [Debian new package procedures](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html#new-packages)
-
-Fedora's official repositories use a separate package review, sponsorship and Fedora build/submission process. Publishing the RPM to GitHub or Cloudsmith gives users immediate installation routes while a Fedora packager pursues inclusion. [Fedora package review](https://docs.fedoraproject.org/en-US/package-maintainers/Package_Review_Process/)
-
-## Arch User Repository
-
-GitHub hosts a ready-made pacman binary. The AUR publishes a source build recipe and its `.SRCINFO` metadata. The publishing job regenerates both for the exact version, pins the tag archive's SHA-256 and fast-forwards the AUR repository. Upgrading a community package into an official Arch repository is a separate Arch packaging-team decision. [AUR submission guidelines](https://wiki.archlinux.org/title/AUR_submission_guidelines)
-
-1. Register an AUR maintainer account. Search for **joomengine** before the first upload. If someone already maintains the package, obtain co-maintainer access or follow the AUR adoption process. For an available name the first accepted push creates the package. [AUR registration](https://aur.archlinux.org/register) · [AUR search](https://aur.archlinux.org/packages?K=joomengine)
-2. Generate a dedicated Ed25519 key in a private temporary directory on a Linux workstation. Collect the AUR server's public host key and display its fingerprint. The commands display public fingerprints and open the directory in your file manager. Compare the fingerprint with the current Ed25519 fingerprint on the AUR home page before using the collected host key. [AUR home and SSH fingerprints](https://aur.archlinux.org/)
-
-   ```bash
-   key_dir=$(mktemp -d)
-   ssh-keygen -t ed25519 -N '' -C 'JoomEngine AUR releases' -f "$key_dir/aur"
-   ssh-keyscan -t ed25519 aur.archlinux.org > "$key_dir/aur_known_hosts"
-   ssh-keygen -lf "$key_dir/aur_known_hosts" -E sha256
-   xdg-open "$key_dir"
-   ```
-
-3. Open **aur.pub** in a local plain-text editor, copy its single public key line, and add it in the AUR account under **My Account → SSH Public Key**. Save the account settings. The corresponding file named **aur** holds the private key used by GitHub. [AUR account](https://aur.archlinux.org/)
-4. In the editor, open **aur**, select all and copy its complete contents, including the `BEGIN OPENSSH PRIVATE KEY` and `END OPENSSH PRIVATE KEY` lines and the original line breaks. In GitHub **Settings → Environments → distribution → Environment secrets → Add secret**, enter `AUR_SSH_PRIVATE_KEY` in **Name**, paste into **Value**, and save. Close the editor and clear the private key from the clipboard and clipboard history. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
-5. In **distribution → Environment variables → Add variable**, create `AUR_KNOWN_HOSTS`. Open **aur_known_hosts** in the editor and paste its verified full `aur.archlinux.org ssh-ed25519 …` host-key line into **Value**. Add a second environment variable named `AUR_MAINTAINER_EMAIL` with the public maintainer contact email you want displayed on AUR commits. [Open JoomEngine environments](https://github.com/joomengine/joomengine/settings/environments)
-6. Verify that the private-key name appears under **Environment secrets** and the host key and email under **Environment variables**. After saving, remove the workstation's temporary files in the original terminal.
-
-   ```bash
-   rm -- "$key_dir/aur" "$key_dir/aur.pub" "$key_dir/aur_known_hosts"
-   rmdir -- "$key_dir"
-   ```
-
-7. Under **Actions → Variables → New repository variable**, add `AUR_PUBLISH` with value `true`. After a tagged release check the version on the AUR package page. [Open JoomEngine repository variables](https://github.com/joomengine/joomengine/settings/variables/actions) · [AUR package records](https://aur.archlinux.org/packages?K=joomengine)
-
-### AUR from the command line
-
-Register or obtain co-maintainer access on the AUR and complete [GitHub CLI setup](publishing.md#github-cli-setup). Obtain the current **Ed25519** fingerprint from the AUR home page independently of the SSH connection. Run this block in an interactive Bash terminal. Enter the absolute path to the private key already authorized for the package, or press Enter to create a dedicated key. For a new key, the block prints its **public** line and pauses while you save it under the AUR account's **My Account → SSH Public Key**. [AUR registration](https://aur.archlinux.org/register) · [AUR host fingerprints](https://aur.archlinux.org/)
-
-```bash
-(
-  set -euo pipefail
-  umask 077
-  repo=joomengine/joomengine
-  gh api --silent "repos/$repo/environments/distribution"
-  key_dir=$(mktemp -d)
-  trap 'rm -rf -- "$key_dir"' EXIT
-  read -r -p 'Existing AUR private key (absolute path, or Enter to generate): ' private_key
-  if [[ -z "$private_key" ]]; then
-    private_key="$key_dir/aur"
-    ssh-keygen -q -t ed25519 -N '' -C 'JoomEngine AUR releases' -f "$private_key"
-    cat "$private_key.pub"
-    read -r -p 'Press Enter after adding this public key to the AUR account. ' _
-  fi
-  # A non-interactive CI login requires a private key usable without a passphrase.
-  ssh-keygen -y -P '' -f "$private_key" > /dev/null
-  read -r -p 'Verified Ed25519 SHA256 fingerprint from the AUR home page: ' approved
-  ssh-keyscan -T 10 -t ed25519 aur.archlinux.org | sort -u > "$key_dir/known_hosts"
-  fingerprint=$(ssh-keygen -lf "$key_dir/known_hosts" -E sha256 | awk '{print $2}' | sort -u)
-  [[ -n "$approved" && "$fingerprint" == "$approved" ]] || { echo "AUR host key verification failed." >&2; exit 1; }
-  read -r -p 'Public AUR Git maintainer email: ' maintainer
-  [[ "$maintainer" == ?*@?* ]]
-  gh secret set AUR_SSH_PRIVATE_KEY --repo "$repo" --env distribution < "$private_key"
-  gh variable set AUR_KNOWN_HOSTS --repo "$repo" --env distribution < "$key_dir/known_hosts"
-  gh variable set AUR_MAINTAINER_EMAIL --repo "$repo" --env distribution --body "$maintainer"
-  gh variable set AUR_PUBLISH --repo "$repo" --body true
-  gh secret list --repo "$repo" --env distribution
-  gh api "repos/$repo/environments/distribution/variables/AUR_MAINTAINER_EMAIL" --jq .value
-  gh api "repos/$repo/environments/distribution/variables/AUR_KNOWN_HOSTS" --jq .value | ssh-keygen -lf - -E sha256
-  gh api "repos/$repo/actions/variables/AUR_PUBLISH" --jq .value
-)
-```
-
-Check the saved key's **name**, public email, AUR host fingerprint and `true` switch. The temporary directory is removed at the end. An existing private key selected from elsewhere stays in its original location. The next tagged release sends the source recipe and its metadata to the AUR.
+1. Search the official package database for **joomengine**. If it is already packaged, send new-release information to the listed maintainer. For a new package, an Arch packager must be willing to maintain it and assess admission to `extra` under Arch's eligibility and popularity rules. The team decides whether to take it on. [Official package search](https://archlinux.org/packages/?q=joomengine) · [Package maintainer guidelines](https://wiki.archlinux.org/title/Package_Maintainer_guidelines) · [Arch package maintainers](https://archlinux.org/people/package-maintainers/)
+2. Provide the release tag, source tarball, its checksum, the Qt dependencies, the upstream test procedure and the project's PKGBUILD template. A participating Arch packager prepares the official recipe, builds it in a clean chroot, signs it and releases it through Arch's packaging infrastructure. Subsequent releases go through the same downstream maintainer. Users can see the repository, packager and package version in Arch's official database once accepted. [PKGBUILD template](../packaging/arch/PKGBUILD.in) · [Upstream tests](contributing.md) · [Arch packaging tools](https://man.archlinux.org/man/pkgctl.1.en)
 
 ## Flatpak and Flathub
 
-Tagged builds publish an installable Flatpak bundle to GitHub. Flathub hosts its own build and review infrastructure. For an official listing:
+Tagged builds publish an installable Flatpak bundle to GitHub. Flathub hosts its own build and review infrastructure. A Flathub application maintainer follows these steps.
 
-1. A project maintainer with a GitHub account and two-factor authentication must independently author the Flathub manifest. Flathub prohibits AI-assisted manifests and automated submission PRs. The GitHub bundle uses AI-assisted packaging. Disclose the affected application code, documentation and packaging and their approximate extent as required. Review Flathub's desktop integration and project-history criteria. Explain the native workspace windows, download and file handling, and saved Joomla projects. Acceptance is decided by Flathub. [Submission requirements](https://docs.flathub.org/docs/for-app-authors/requirements)
+1. A project maintainer with a GitHub account and two-factor authentication must independently author the Flathub manifest. The maintainer personally writes the submission, commit messages, and review replies under Flathub’s AI policy. The GitHub bundle uses AI-assisted packaging. Disclose the affected application code, documentation and packaging and their approximate extent as required. Check Flathub’s minimum project-history and desktop-integration criteria for applications that embed a website. Explain the native workspace windows, download and file handling, and saved Joomla projects. Acceptance is decided by Flathub. [Submission requirements](https://docs.flathub.org/docs/for-app-authors/requirements)
 2. Use the project-controlled app ID `org.joomengine.app`. Test the human-authored manifest with the Flathub builder and linter. Fork the Flathub repository including the `new-pr` branch, branch from it, and open the submission against `flathub/flathub:new-pr`. The maintainer handles the submission and reviewer correspondence. After approval, accept the invitation to the app repository. [Flathub submission](https://docs.flathub.org/docs/for-app-authors/submission) · [Flathub repository](https://github.com/flathub/flathub/tree/new-pr)
 3. In that app repository the maintainer can configure `x-checker-data` for stable JoomEngine release sources. Flathub's external data checker opens version updates. Review its test build and merge the update to trigger the official build and publication. This route uses Flathub's infrastructure and needs no Flathub token in the JoomEngine repository. [Flathub updates](https://docs.flathub.org/docs/for-app-authors/maintenance)
 4. Sign into the Flathub developer dashboard and select the app to verify ownership. For the domain-file verification method, place the supplied token at `https://joomengine.org/.well-known/org.flathub.VerifiedApps.txt`. [Flathub developer dashboard](https://flathub.org/apps/mine) · [Verification](https://docs.flathub.org/docs/for-app-authors/verification)
 
-## AppImageHub and the Linux archive
+## Project downloads
 
-GitHub hosts both the AppImage and the Linux tar archive. Neither requires store credentials. Once the first public versioned release includes the AppImage, a maintainer may submit a one-line file named `data/JoomEngine` containing `https://github.com/joomengine/joomengine` to the AppImageHub catalog. Reviewers exercise the package on their baseline Linux image and decide inclusion. Using the repository URL lets the catalog discover subsequent AppImages through GitHub Releases. [Submit to AppImageHub](https://github.com/AppImage/appimage.github.io/new/master/data) · [Catalog requirements and update behavior](https://github.com/AppImage/appimage.github.io#how-to-submit-appimages-to-the-catalog)
+AppImage and the Linux archive are published with `SHA256SUMS` on JoomEngine's GitHub Releases. Each release also provides direct Debian, Arch, Fedora, Snap and Flatpak downloads independently of store or archive admission. Users can install their chosen package directly. [Downloads](https://github.com/joomengine/joomengine/releases) · [Linux installation guides](install-linux.md) · [Checksum verification](install-verify.md)
+
+[All publishing channels](publishing.md)

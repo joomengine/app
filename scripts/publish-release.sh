@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Called only from the release job after exact-name, digest and platform checks.
 set -euo pipefail
+prepare=false
+if [[ ${1:-} == --prepare-for-signing ]]; then
+  prepare=true
+  shift
+fi
+[[ $# == 1 ]] || { echo 'Usage: publish-release.sh [--prepare-for-signing] DIRECTORY' >&2; exit 2; }
+
 repo=${GITHUB_REPOSITORY:?}
 commit=${GITHUB_SHA:?}
 version=$(cat VERSION)
@@ -40,10 +47,19 @@ if gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft > "$existing/d
     else
       python3 scripts/verify-release.py "$repo" "$tag" "$dir"
     fi
+    # A rebuilt preview can differ from the immutable public bytes. Its original
+    # publication already signed those bytes. Never attest the new build as that release.
+    if [[ $prepare == true ]]; then echo 'publish=false' >> "${GITHUB_OUTPUT:?}"; fi
     exit 0
   fi
 else
   gh release create "$tag" -R "$repo" --draft --title "$title" --notes-file "$notes" "${create_options[@]}"
+fi
+
+if [[ $prepare == true ]]; then
+  # The checked build can now be signed. A failed attestation leaves this release in draft.
+  echo 'publish=true' >> "${GITHUB_OUTPUT:?}"
+  exit 0
 fi
 
 # A retry can resume an interrupted draft. Upload all assets before opening it.

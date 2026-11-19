@@ -7,7 +7,38 @@ permissions:
   contents: read
 
 jobs:
+  prepare:
+    name: Prepare the registered Partner Center package
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
+          path: store-input
+      - name: Package the tested Windows executable with the reserved identity
+        shell: pwsh
+        env:
+          MICROSOFT_STORE_PACKAGE_NAME: ${{ vars.MICROSOFT_STORE_PACKAGE_NAME }}
+          MICROSOFT_STORE_PACKAGE_PUBLISHER: ${{ vars.MICROSOFT_STORE_PACKAGE_PUBLISHER }}
+          MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $zip = Get-Item 'store-input/*.zip'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath build/Release
+          ./scripts/package-windows.ps1 -Store
+          ./packaging/windows/test-store-package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: microsoft-store-submission
+          path: dist/store/*.msixupload
+          if-no-files-found: error
+          compression-level: 0
+
   submit:
+    needs: prepare
     name: Submit the certified listing's package update
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.MICROSOFT_STORE_PUBLISH == 'true'
     runs-on: windows-2022

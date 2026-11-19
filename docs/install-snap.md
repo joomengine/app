@@ -9,6 +9,8 @@
 
 3. Open **JoomEngine** from the applications menu or run `snap run joomengine`.
 
+If you already downloaded the separate `_amd64.snap` asset, place it and the installer from that same release together in a new folder. Run `bash ./joomengine-install-snap.sh ./joomengine_*_amd64.snap` there. The installer checks the file's SHA-256 before installing it and configures the same runtime and connections.
+
 To update, quit JoomEngine and run the new installer. This also upgrades an existing 0.1.0 Snap. If you prefer the store, choose **Install** on the [JoomEngine Snap Store page](https://snapcraft.io/joomengine) once the stable listing is public.
 
 [Install snapd on your distribution](https://snapcraft.io/docs/installing-snapd) · [Read a Snap warning](troubleshooting.md#snap-installed-with-a-warning) · [Check the download](install-verify.md#linux) · [All installation guides](README.md)

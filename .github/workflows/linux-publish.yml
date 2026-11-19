@@ -1,4 +1,4 @@
-name: Publish Linux distribution packages
+name: Publish to the Snap Store
 
 on:
   workflow_call:
@@ -48,55 +48,3 @@ jobs:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
           REVISION: ${{ steps.candidate.outputs.revision }}
         run: snapcraft release joomengine "$REVISION" latest/stable
-
-  debian:
-    name: Signed Debian APT repository
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.DEBIAN_REPO_PUBLISH == 'true'
-    runs-on: ubuntu-24.04
-    environment: distribution
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: ./packaging/publish/cloudsmith
-        with:
-          format: deb
-          distribution: debian/trixie
-          namespace: ${{ vars.CLOUDSMITH_NAMESPACE }}
-          repository: ${{ vars.CLOUDSMITH_REPOSITORY }}
-          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
-          github-token: ${{ github.token }}
-
-  fedora:
-    name: Signed Fedora RPM repository
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.RPM_REPO_PUBLISH == 'true'
-    runs-on: ubuntu-24.04
-    environment: distribution
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: ./packaging/publish/cloudsmith
-        with:
-          format: rpm
-          distribution: fedora/44
-          namespace: ${{ vars.CLOUDSMITH_NAMESPACE }}
-          repository: ${{ vars.CLOUDSMITH_REPOSITORY }}
-          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
-          github-token: ${{ github.token }}
-
-  arch:
-    name: Update Arch User Repository recipe
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && vars.AUR_PUBLISH == 'true'
-    runs-on: ubuntu-24.04
-    environment: distribution
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Publish tagged source recipe and native makepkg metadata
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          AUR_KNOWN_HOSTS: ${{ vars.AUR_KNOWN_HOSTS }}
-          AUR_MAINTAINER_EMAIL: ${{ vars.AUR_MAINTAINER_EMAIL }}
-        run: packaging/publish/aur.sh
