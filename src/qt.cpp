@@ -193,7 +193,7 @@ public:
                         << "error domain" << info.errorDomain() << "code" << info.errorCode();
             });
             connect(page, &QWebEnginePage::titleChanged, this, [this, reload](const QString& title) {
-                qa::onTitle(title.toStdString(), [reload] { reload->trigger(); }, [this] { close(); },
+                qa::onTitle(title.toStdString(), [reload](bool) { reload->trigger(); }, [this] { close(); },
                     [this] { page->action(QWebEnginePage::SelectAll)->trigger(); });
             });
         }

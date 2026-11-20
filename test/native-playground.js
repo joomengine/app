@@ -223,6 +223,10 @@
     }
   }
   try {
+    // WebView2 installs this driver before the document has a head for its title.
+    if (document.readyState === 'loading') {
+      await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    }
     signal('progress', 'Loading the hosted Playground.');
     if (config.write) {
       await until(controlledLabel, () => navigator.serviceWorker?.controller && Boolean(globalThis.crossOriginIsolated));
