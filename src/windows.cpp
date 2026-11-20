@@ -436,7 +436,10 @@ struct Window : std::enable_shared_from_this<Window> {
                         },
                         [self] { PostMessageW(self->hwnd, WM_CLOSE, 0, 0); },
                         [self] { PostMessageW(self->hwnd, WM_COMMAND, selectAllCommand, 0); },
-                        [self] { self->importArchive(); });
+                        [self](bool useDesktopDialog) {
+                            if (useDesktopDialog) self->qaFailure("External desktop chooser automation requires Linux.");
+                            else self->importArchive();
+                        });
 #endif
                 return S_OK;
             }).Get(), &token);

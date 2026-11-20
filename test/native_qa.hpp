@@ -64,7 +64,8 @@ void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectA
     logEvent(command, detail);
 
     if (command == "select-all") selectAll();
-    if (command == "import-file" && environment("JOOMENGINE_QA_PHASE") == "import") importFile();
+    if ((command == "import-file" || command == "choose-import") && environment("JOOMENGINE_QA_PHASE") == "import")
+        importFile(command == "choose-import");
     if (command == "reload" || command == "retry-module") reload(command == "reload");
     if (command == "fail" || command == "pass") {
         result = command == "pass" ? 0 : 1;
