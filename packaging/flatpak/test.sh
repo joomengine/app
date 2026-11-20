@@ -19,16 +19,26 @@ cat > "$work/run-qa" <<'SCRIPT'
 exec flatpak run --user org.joomengine.app//qa
 SCRIPT
 chmod +x "$work/run-release" "$work/run-qa"
-# Run both launches in a real user session so Qt WebEngine's Flatpak subprocess
-# portal can create its sandboxed Chromium renderers.
+# A headless runner has no desktop session that selects a file chooser backend.
+# Give this test desktop its GTK backend and one display for both app launches.
+portal_config="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal/joomengine-qa-portals.conf"
+mkdir -p "$(dirname "$portal_config")"
+printf '[preferred]\ndefault=gtk\n' > "$portal_config"
+trap 'rm -f "$portal_config"' EXIT
 systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-  xvfb-run -a scripts/check-linux-window.sh "$work/run-release" "$HOME/.var/app/org.joomengine.app/data/JoomEngine/browser"
-flatpak kill org.joomengine.app 2>/dev/null || true
-systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-  --setenv="TMPDIR=$qa_cache" xvfb-run -a bash -euc '
-    # The out-of-process GTK chooser is D-Bus activated. Give the portal this
-    # Xvfb session after the previous release binary closed its own display.
-    dbus-update-activation-environment --systemd DISPLAY XAUTHORITY
-    systemctl --user restart xdg-desktop-portal-gtk.service xdg-desktop-portal.service
-    exec python3 test/native_smoke.py --native-file-chooser "$1"
-  ' _ "$work/run-qa"
+  --setenv="TMPDIR=$qa_cache" --setenv=XDG_CURRENT_DESKTOP=JoomEngine-QA --setenv=XDG_SESSION_TYPE=x11 \
+  xvfb-run -a bash -euc '
+    dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+    systemctl --user restart xdg-desktop-portal-gtk.service
+    systemctl --user restart xdg-desktop-portal.service
+    for interface in Settings FileChooser; do
+      if ! busctl --user get-property org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
+          "org.freedesktop.portal.$interface" version; then
+        journalctl --user --no-pager -b -u xdg-desktop-portal -u xdg-desktop-portal-gtk -n 80
+        exit 1
+      fi
+    done
+    scripts/check-linux-window.sh "$1/run-release" "$HOME/.var/app/org.joomengine.app/data/JoomEngine/browser"
+    flatpak kill org.joomengine.app 2>/dev/null || true
+    exec python3 test/native_smoke.py --native-file-chooser "$1/run-qa"
+  ' _ "$work"
