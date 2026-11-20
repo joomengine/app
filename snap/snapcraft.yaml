@@ -28,6 +28,19 @@ layout:
     bind: $SNAP/usr/share/fontconfig
 
 parts:
+  desktop-schemas:
+    plugin: nil
+    build-packages: [libglib2.0-bin]
+    stage-packages: [gsettings-desktop-schemas, libgtk-3-common]
+    override-build: |
+      craftctl default
+      schemas="$CRAFT_PART_INSTALL/usr/share/glib-2.0/schemas"
+      glib-compile-schemas --strict "$schemas"
+    stage:
+      - usr/share/glib-2.0/schemas/gschemas.compiled
+      - usr/share/doc/gsettings-desktop-schemas/copyright
+      - usr/share/doc/libgtk-3-common/copyright
+
   application:
     plugin: dump
     source: payload
