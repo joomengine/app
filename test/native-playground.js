@@ -3,6 +3,7 @@
 (async () => {
   if (window !== window.top || window.opener || location.origin !== 'https://playground.joomengine.org') return;
   const config = __JOOMENGINE_QA_CONFIGURATION__;
+  const write = config.phase === 'write';
   const signal = (command, detail) => {
     document.title = 'JE-QA/' + config.id + '/' + command + '/' + String(detail).replace(/[\r\n]/g, ' ').slice(0, 1400);
   };
@@ -198,10 +199,43 @@
     const button = element(id);
     return button && !button.disabled && button.getClientRects().length > 0 ? button : null;
   }
+  function importFailure() {
+    const feedback = element('header-feedback');
+    if (feedback?.dataset.error === 'true' && !feedback.hidden) return 'Site upload: ' + safeText(feedback.textContent);
+  }
+  async function importSite() {
+    const originalKey = element('storage-key').value;
+    const originalFrame = element('site-frame');
+    if (element('settings').hidden) element('settings-toggle').click();
+    await until('enabled Upload button', () => visibleButton('upload-site-button')?.matches(':enabled'));
+    const button = element('upload-site-button');
+    button.focus();
+    if (document.activeElement !== button) throw Error('Could not focus the Playground Upload button.');
+    signal(config.nativeChooser ? 'choose-import' : 'import-file', 'Select the exported complete site ZIP.');
+    await until('Upload replacement confirmation', () =>
+      document.querySelector('dialog[data-live-replacement][open] button[data-replace-choice="continue"]'), 120000, importFailure);
+    document.querySelector('dialog[data-live-replacement][open] button[data-replace-choice="continue"]').click();
+    await until('the imported site in its new workspace', () => {
+      const frame = element('site-frame');
+      const key = element('storage-key').value;
+      return key !== originalKey && key.startsWith('import-') && frame && frame !== originalFrame &&
+        element('credentials-button').matches(':enabled') && frame.contentDocument?.readyState === 'complete';
+    }, 480000, importFailure);
+  }
+  async function verifyImportedFile() {
+    const site = new URL(element('site-frame').src);
+    const base = site.pathname.match(/^(.*\/__site\/[^/]+\/[^/]+\/)/);
+    if (!base || site.origin !== location.origin) throw Error('Missing imported site route.');
+    const response = await fetch(new URL(base[1] + config.asset.path, site.origin), { cache: 'no-store' });
+    const bytes = await response.arrayBuffer();
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+      byte => byte.toString(16).padStart(2, '0')).join('');
+    if (!response.ok || digest !== config.asset.digest) throw Error('The imported site file differs from the ZIP.');
+  }
   function advanceFreshWelcome() {
     // Only the isolated, fresh deployment can use welcome actions. Never
     // restart a running/saved site, or retry a write or partially built site.
-    if (!config.write || element('site-frame') || document.hidden ||
+    if (!write || element('site-frame') || document.hidden ||
         document.documentElement.dataset.playgroundEnvironment !== 'ready') return;
     const key = 'joomengine-native-qa-welcome-' + config.id;
     const update = visibleButton('reload-build');
@@ -228,7 +262,7 @@
       await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
     }
     signal('progress', 'Loading the hosted Playground.');
-    if (config.write) {
+    if (write) {
       await until(controlledLabel, () => navigator.serviceWorker?.controller && Boolean(globalThis.crossOriginIsolated));
       await fetchRepositoryCatalog();
     }
@@ -242,12 +276,18 @@
         (state.route.endsWith('?option=com_componentbuilder') && state.jcbLinks >= 2 && Boolean(state.body));
     }, 480000);
     signal('progress', 'JCB dashboard rendered with service-worker control and shared-memory isolation.');
+    if (config.phase === 'import') await importSite();
+    if (!write) {
+      const key = element('storage-key').value;
+      if (config.phase === 'restore' && key !== config.importKey) throw Error('Reopened a different saved site.');
+      await verifyImportedFile();
+    }
     await openDatabase();
-    if (config.write) await detach();
-    await query(config.write);
-    signal('progress', config.write ? 'Saved the marker row in MariaDB.' : 'Recovered the marker row in MariaDB.');
+    if (write) await detach();
+    await query(write);
+    signal('progress', write ? 'Saved the marker row in MariaDB.' : 'Recovered the marker row in MariaDB.');
     await until('the Playground checkpoint', () => /^saved locally/i.test(element('save-state')?.textContent || ''), 240000);
-    if (config.write) {
+    if (write) {
       await until('Download action', () => element('download-dialog-button')?.disabled === false);
       element('download-dialog-button').click();
       await until('complete site export dialog', () => element('download-dialog')?.open && !element('export-button').disabled);
@@ -259,7 +299,7 @@
       // state. Give Playground its full normal checkpoint before native Quit.
       await until('export completion and its on-disk checkpoint', () => !element('export-button').disabled &&
         /^saved locally/i.test(element('save-state')?.textContent || ''), 240000);
-    } else {
+    } else if (config.phase === 'restore') {
       const previous = sessionStorage.getItem(reloadKey);
       if (!previous) {
         sessionStorage.setItem(reloadKey, String(performance.timeOrigin));
@@ -267,11 +307,13 @@
         return;
       }
       if (Number(previous) === performance.timeOrigin) throw Error('Reload did not open a fresh browser document.');
-      signal('progress', 'The saved MariaDB row survived a native reload in a fresh document.');
+      signal('progress', 'The imported file and MariaDB row survived restart and native Reload.');
     }
-    // The runner checks the native download bytes before permitting shutdown.
+    // Carry the new workspace identity through the native pass event. The next
+    // process must recover that same imported site after a complete shutdown.
+    const result = config.phase === 'import' ? element('storage-key').value : config.phase;
     for (let attempt = 0; ; attempt++) {
-      signal('pass', (config.write ? 'write ' : 'restore ') + attempt);
+      signal('pass', result + ' ' + attempt);
       await delay(400);
     }
   } catch (error) {
@@ -282,7 +324,7 @@
     const retryKey = 'joomengine-native-qa-module-retry-' + config.id;
     const phpRestarted = [...document.querySelectorAll('#activity-log li')].some(item =>
       item.textContent.includes('PHP restarted after an application error'));
-    if (!config.write && !phpRestarted && error.message === databaseImportError &&
+    if (config.phase === 'restore' && !phpRestarted && error.message === databaseImportError &&
         !sessionStorage.getItem(reloadKey) && !sessionStorage.getItem(retryKey)) {
       sessionStorage.setItem(retryKey, '1');
       signal('retry-module', 'The hosted Database module failed to download. Reloading the saved workspace once.');

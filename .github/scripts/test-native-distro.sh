@@ -6,17 +6,17 @@ case "$1" in
     debian)
         apt-get -o Acquire::Retries=3 update
         apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
-            /out/packages/*.deb dbus-daemon xvfb xauth xdotool fonts-dejavu-core python3
+            /out/packages/*.deb dbus-daemon xvfb xauth xdotool x11-utils fonts-dejavu-core python3
         dpkg-query -W -f='Installed ${binary:Package} ${Version}\n' joomengine
         ;;
     arch)
-        pacman -Syu --noconfirm --needed dbus xorg-server-xvfb xorg-xauth xdotool ttf-dejavu python
+        pacman -Syu --noconfirm --needed dbus xorg-server-xvfb xorg-xauth xdotool xorg-xprop ttf-dejavu python
         pacman -U --noconfirm /out/packages/*.pkg.tar.zst
         pacman -Qkk joomengine
         ;;
     fedora)
         dnf install -y /out/packages/*.rpm python3 dbus-daemon dbus-tools xorg-x11-server-Xvfb \
-            xorg-x11-xauth xdotool dejavu-sans-fonts shadow-utils util-linux
+            xorg-x11-xauth xdotool /usr/bin/xprop dejavu-sans-fonts shadow-utils util-linux
         rpm -V joomengine
         ;;
     *) exit 2 ;;
@@ -33,4 +33,4 @@ cd /tmp
 runuser -u desktop -- env HOME=/home/desktop XDG_RUNTIME_DIR=/tmp/desktop-runtime \
     dbus-run-session -- xvfb-run -a /checkout/scripts/check-linux-window.sh /usr/bin/joomengine
 runuser -u desktop -- env HOME=/home/desktop XDG_RUNTIME_DIR=/tmp/desktop-runtime \
-    dbus-run-session -- xvfb-run -a python3 /checkout/test/native_smoke.py /out/qa/joomengine
+    dbus-run-session -- xvfb-run -a python3 /checkout/test/native_smoke.py --native-file-chooser /out/qa/joomengine

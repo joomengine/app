@@ -29,7 +29,7 @@ jobs:
           "$unpack"/JoomEngine-*/install.sh
           dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$HOME/.local/bin/joomengine"
       - name: Exercise hosted JCB in Qt WebEngine
-        run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py build-qa/joomengine
+        run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser build-qa/joomengine
       - uses: actions/upload-artifact@v4
         with:
           name: linux-archive
@@ -148,7 +148,7 @@ jobs:
           tmp="$HOME/snap/joomengine/common"
           mkdir -p "$tmp"
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-            --setenv="TMPDIR=$tmp" xvfb-run -a python3 test/native_smoke.py /snap/bin/joomengine
+            --setenv="TMPDIR=$tmp" xvfb-run -a python3 test/native_smoke.py --native-file-chooser /snap/bin/joomengine
       - name: Show Snap process and confinement diagnostics on failure
         if: failure()
         run: |
