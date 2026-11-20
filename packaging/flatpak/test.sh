@@ -25,4 +25,10 @@ systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
   xvfb-run -a scripts/check-linux-window.sh "$work/run-release"
 flatpak kill org.joomengine.app 2>/dev/null || true
 systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-  --setenv="TMPDIR=$qa_cache" xvfb-run -a python3 test/native_smoke.py "$work/run-qa"
+  --setenv="TMPDIR=$qa_cache" xvfb-run -a bash -euc '
+    # The out-of-process GTK chooser is D-Bus activated. Give the portal this
+    # Xvfb session after the previous release binary closed its own display.
+    dbus-update-activation-environment --systemd DISPLAY XAUTHORITY
+    systemctl --user restart xdg-desktop-portal-gtk.service xdg-desktop-portal.service
+    exec python3 test/native_smoke.py --native-file-chooser "$1"
+  ' _ "$work/run-qa"

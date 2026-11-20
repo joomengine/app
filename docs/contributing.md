@@ -18,7 +18,7 @@ Install a C++17 compiler and the Qt 6.8 or newer development packages for Widget
 
 ```sh
 sudo apt update
-sudo apt install cmake g++ pkg-config qt6-base-dev qt6-webengine-dev libqt6webenginecore6-bin qt6-qpa-plugins dbus-x11 xvfb xauth xdotool
+sudo apt install cmake g++ pkg-config qt6-base-dev qt6-webengine-dev libqt6webenginecore6-bin qt6-qpa-plugins dbus-x11 xvfb xauth xdotool x11-utils
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ./build/joomengine
@@ -54,14 +54,14 @@ c++ -std=c++17 -Wall -Wextra -Werror -Isrc test/policy.cpp -o build/joomengine-p
 ./build/joomengine-policy-test
 ```
 
-The hosted test starts an instrumented build with a temporary browser profile. It loads JCB, fetches an external file, opens a detached tool, saves a unique database row, checks that row in the exported ZIP, then reads it again after restarting and performing native Reload. It needs Python 3 and an internet connection to Playground and its external dependencies.
+The hosted test starts an instrumented build with a temporary browser profile. It loads JCB, fetches an external file, opens a detached tool, saves a unique database row, exports the complete site, and uploads that ZIP through Playground. It verifies the imported file bytes and database row after a restart and native Reload. Linux package jobs drive the desktop file chooser on a private X11 display. It needs Python 3 and an internet connection to Playground and its external dependencies.
 
 Run the Linux test in a virtual display.
 
 ```sh
 cmake -S . -B build-qa -DCMAKE_BUILD_TYPE=Release -DJOOMENGINE_NATIVE_QA=ON
 cmake --build build-qa --parallel
-dbus-run-session -- xvfb-run -a python3 test/native_smoke.py build-qa/joomengine
+dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser build-qa/joomengine
 ```
 
 On macOS, run the executable inside the QA app bundle.

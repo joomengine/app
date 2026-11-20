@@ -14,7 +14,7 @@ apt_options=(
   -o Acquire::Languages=none -o Acquire::Retries=2
   -o Acquire::https::Timeout=25 -o APT::Update::Error-Mode=any
 )
-packages=(ca-certificates cmake g++ pkg-config xvfb xauth xdotool "$@")
+packages=(ca-certificates cmake g++ pkg-config xvfb xauth xdotool x11-utils "$@")
 # The hosted image's proxy has returned HTTP 503 for package files even after
 # retrieving signed indexes. All mirrors must serve the same signed Ubuntu
 # release, including security updates, with Ubuntu's installed archive key.

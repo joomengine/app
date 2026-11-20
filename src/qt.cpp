@@ -1,6 +1,8 @@
 #include "desktop.hpp"
 #ifdef JOOMENGINE_NATIVE_QA
 #include "native_qa.hpp"
+#include <QKeyEvent>
+#include <QTimer>
 #endif
 
 #include <QAction>
@@ -44,11 +46,36 @@ void openExternal(const QUrl& url) {
         QDesktopServices::openUrl(url);
 }
 
+#ifdef JOOMENGINE_NATIVE_QA
+class WorkspacePage final : public QWebEnginePage {
+public:
+    using QWebEnginePage::QWebEnginePage;
+    bool awaitingArchive = false;
+
+protected:
+    QStringList chooseFiles(FileSelectionMode mode, const QStringList& previous, const QStringList& mimeTypes) override {
+        if (!std::exchange(awaitingArchive, false))
+            return QWebEnginePage::chooseFiles(mode, previous, mimeTypes);
+        const QString file = QString::fromUtf8(qgetenv("JOOMENGINE_QA_EXPORT"));
+        if (mode != FileSelectOpen || url().scheme() != QStringLiteral("https") ||
+            !joomengine::isWorkspaceURL(url().toEncoded().toStdString()) || !QFileInfo(file).isFile()) {
+            qa::logEvent("fail", "Unexpected Qt file chooser or missing exported archive.");
+            QApplication::exit(1);
+            return {};
+        }
+        qa::logEvent("native", "Selected the exported archive in the browser's file chooser.");
+        return {file};
+    }
+};
+#else
+using WorkspacePage = QWebEnginePage;
+#endif
+
 class WorkspaceWindow final : public QMainWindow {
 public:
     explicit WorkspaceWindow(QWebEngineProfile& profile, WorkspaceWindow* opener = nullptr)
         : QMainWindow(opener, Qt::Window), owner(opener ? opener->owner : this), browser(new QWebEngineView(this)),
-          page(new QWebEnginePage(&profile, browser)) {
+          page(new WorkspacePage(&profile, browser)) {
         setWindowTitle(opener ? QStringLiteral("JoomEngine Tool") : QStringLiteral("JoomEngine"));
         resize(opener ? 1100 : 1400, opener ? 760 : 900);
         if (opener) {
@@ -194,7 +221,24 @@ public:
             });
             connect(page, &QWebEnginePage::titleChanged, this, [this, reload](const QString& title) {
                 qa::onTitle(title.toStdString(), [reload](bool) { reload->trigger(); }, [this] { close(); },
-                    [this] { page->action(QWebEnginePage::SelectAll)->trigger(); });
+                    [this] { page->action(QWebEnginePage::SelectAll)->trigger(); }, [this] {
+                        // Chromium requires a user gesture to open a file input.
+                        // Send Enter to the focused Upload button via Qt's browser widget.
+                        page->awaitingArchive = true;
+                        auto* target = browser->focusProxy();
+                        if (!target) target = browser;
+                        target->setFocus();
+                        QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
+                        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
+                        QApplication::sendEvent(target, &press);
+                        QApplication::sendEvent(target, &release);
+                        QTimer::singleShot(15000, this, [this] {
+                            if (page->awaitingArchive) {
+                                qa::logEvent("fail", "Qt did not receive the browser file chooser request.");
+                                QApplication::exit(1);
+                            }
+                        });
+                    });
             });
         }
 #endif
@@ -257,7 +301,7 @@ private:
 #endif
     WorkspaceWindow* owner;
     QWebEngineView* browser;
-    QWebEnginePage* page;
+    WorkspacePage* page;
     bool closeApproved = false;
     bool rendererStopped = false;
 };

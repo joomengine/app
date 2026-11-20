@@ -15,6 +15,7 @@
 
 #ifdef JOOMENGINE_NATIVE_QA
 #include "native_qa.hpp"
+#include <choc/text/choc_JSON.h>
 #endif
 
 using Microsoft::WRL::Callback;
@@ -46,7 +47,7 @@ std::wstring wide(std::string_view source) {
 struct Text {
     PWSTR data = nullptr;
     ~Text() { CoTaskMemFree(data); }
-    std::string utf8() const {
+    static std::string utf8(LPCWSTR data) {
         if (!data || !*data) return {};
         const int length = lstrlenW(data);
         int size = WideCharToMultiByte(CP_UTF8, 0, data, length, nullptr, 0, nullptr, nullptr);
@@ -54,6 +55,7 @@ struct Text {
         WideCharToMultiByte(CP_UTF8, 0, data, length, result.data(), size, nullptr, nullptr);
         return result;
     }
+    std::string utf8() const { return utf8(data); }
 };
 
 struct Popup {
@@ -164,6 +166,46 @@ struct Window : std::enable_shared_from_this<Window> {
         qa::result = 1;
         qa::logEvent("fail", detail);
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+
+    void importArchive() {
+        const wchar_t* file = _wgetenv(L"JOOMENGINE_QA_EXPORT");
+        std::error_code error;
+        if (!file || !std::filesystem::is_regular_file(file, error)) {
+            qaFailure("The exported archive is missing.");
+            return;
+        }
+        // Resolve this particular document's file input. Navigation invalidates
+        // its remote object ID, so a replacement document cannot receive the file.
+        constexpr auto lookup = LR"json({"expression":"location.origin === 'https://playground.joomengine.org' && document.querySelector('#upload-site-file[type=file]')"})json";
+        auto self = shared_from_this();
+        auto select = Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
+            [self, path = Text::utf8(file)](HRESULT hr, LPCWSTR response) -> HRESULT {
+                if (!self->hwnd) return S_OK;
+                if (FAILED(hr)) {
+                    self->qaFailure("WebView2 could not locate the Playground upload field.");
+                    return S_OK;
+                }
+                try {
+                    const auto reply = choc::json::parse(Text::utf8(response));
+                    const auto object = reply["result"]["objectId"].getString();
+                    const auto params = wide("{\"objectId\":" + choc::json::getEscapedQuotedString(object) +
+                        ",\"files\":[" + choc::json::getEscapedQuotedString(path) + "]}");
+                    hr = self->web->CallDevToolsProtocolMethod(L"DOM.setFileInputFiles", params.c_str(),
+                        Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
+                            [self](HRESULT result, LPCWSTR) -> HRESULT {
+                                if (self->hwnd && FAILED(result))
+                                    self->qaFailure("WebView2 could not select the exported archive.");
+                                return S_OK;
+                            }).Get());
+                    if (FAILED(hr)) self->qaFailure("Could not dispatch the WebView2 archive selection.");
+                } catch (const std::exception&) {
+                    self->qaFailure("The Playground upload field is missing in WebView2.");
+                }
+                return S_OK;
+            });
+        if (FAILED(web->CallDevToolsProtocolMethod(L"Runtime.evaluate", lookup, select.Get())))
+            qaFailure("Could not dispatch the WebView2 upload field lookup.");
     }
 
     HRESULT configureQaDialogs() {
@@ -379,7 +421,8 @@ struct Window : std::enable_shared_from_this<Window> {
                                 self->qaFailure("Could not post the native Reload command.");
                         },
                         [self] { PostMessageW(self->hwnd, WM_CLOSE, 0, 0); },
-                        [self] { PostMessageW(self->hwnd, WM_COMMAND, selectAllCommand, 0); });
+                        [self] { PostMessageW(self->hwnd, WM_COMMAND, selectAllCommand, 0); },
+                        [self] { self->importArchive(); });
 #endif
                 return S_OK;
             }).Get(), &token);

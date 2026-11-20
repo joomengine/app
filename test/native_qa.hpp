@@ -49,8 +49,8 @@ inline bool takeSavedReloadConfirmation(bool& pending, bool beforeUnload, std::s
 
 // Called only for the owner window in the QA build. File output also works
 // for native GUI binaries without an attached console on Windows or macOS.
-template<class Reload, class Quit, class SelectAll>
-void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectAll) {
+template<class Reload, class Quit, class SelectAll, class ImportFile>
+void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectAll, ImportFile importFile) {
     const std::string prefix = "JE-QA/" + environment("JOOMENGINE_QA_ID") + "/";
     if (title.compare(0, prefix.size(), prefix) != 0) return;
     title.remove_prefix(prefix.size());
@@ -64,6 +64,7 @@ void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectA
     logEvent(command, detail);
 
     if (command == "select-all") selectAll();
+    if (command == "import-file" && environment("JOOMENGINE_QA_PHASE") == "import") importFile();
     if (command == "reload" || command == "retry-module") reload(command == "reload");
     if (command == "fail" || command == "pass") {
         result = command == "pass" ? 0 : 1;

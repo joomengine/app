@@ -66,4 +66,4 @@ if [[ ! -r /dev/fuse || ! -w /dev/fuse ]]; then export APPIMAGE_EXTRACT_AND_RUN=
 dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$installed"
 "$work/JoomEngine-QA.AppImage" --appimage-extract-and-run --install
 cmp "$work/JoomEngine-QA.AppImage" "$installed"
-dbus-run-session -- xvfb-run -a python3 test/native_smoke.py "$installed"
+dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser "$installed"

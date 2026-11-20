@@ -2,8 +2,10 @@
 """Exercise hosted JCB in the native QA build, with an isolated durable profile."""
 
 import argparse
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -52,17 +54,29 @@ def exported(path, identifier):
         return False
 
 
+def public_site_file(bundle):
+    """Match a small asset served from the imported site to its actual ZIP member."""
+    with ZipFile(bundle) as archive:
+        for member in archive.infolist():
+            if (re.fullmatch(r'site/media/(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.(?:css|svg|png)', member.filename)
+                    and 0 < member.file_size <= 65536):
+                return {'path': member.filename.removeprefix('site/'),
+                        'digest': hashlib.sha256(archive.read(member)).hexdigest()}
+    raise ValueError('The exported Joomla site contains no small public media fixture')
+
+
 class InitialNavigationTimeout(TimeoutError):
     """The first macOS renderer produced no QA command in a fresh profile."""
 
 
-def exercise(binary, work, identifier, write):
-    mode = 'write' if write else 'restore'
+def exercise(binary, work, identifier, mode, *, native_chooser=False, import_key=None):
+    write = mode == 'write'
     log = work / (mode + '.log')
     gate = work / (mode + '.ready')
     script = work / (mode + '.js')
     bundle = work / 'complete-site.zip'
-    config = json.dumps({'id': identifier, 'write': write})
+    config = json.dumps({'id': identifier, 'phase': mode, 'nativeChooser': native_chooser,
+                         'asset': None if write else public_site_file(bundle), 'importKey': import_key})
     template = Path(__file__).with_name('native-playground.js').read_text(encoding='utf-8')
     script.write_text(template.replace('__JOOMENGINE_QA_CONFIGURATION__', config), encoding='utf-8')
     if not write:
@@ -82,6 +96,8 @@ def exercise(binary, work, identifier, write):
     started = time.monotonic()
     deadline = started + 900
     lines_seen = 0
+    chooser_used = False
+    imported = None
     try:
         while True:
             if write and not gate.exists() and exported(bundle, identifier):
@@ -93,13 +109,25 @@ def exercise(binary, work, identifier, write):
                 lines = log.read_text(encoding='utf-8', errors='replace').splitlines()
                 for line in lines[lines_seen:]:
                     print(line, flush=True)
+                    if line.startswith('choose-import '):
+                        if mode != 'import' or not native_chooser or chooser_used:
+                            raise RuntimeError('Unexpected native file chooser request')
+                        from linux_file_chooser import select_archive
+                        chooser_used = True
+                        select_archive(bundle, process)
+                    if mode == 'import' and line.startswith('pass '):
+                        match = re.fullmatch(r'pass (import-[0-9a-f-]{36}) [0-9]+', line)
+                        if match:
+                            imported = match[1]
                 lines_seen = len(lines)
             if status is not None:
                 if status or not any(line.startswith('pass ') for line in lines):
                     raise RuntimeError(f'Native {mode} check exited with status {status} before the pass signal.')
-                if not write and not any(line.startswith('reload ') for line in lines):
+                if mode == 'restore' and not any(line.startswith('reload ') for line in lines):
                     raise RuntimeError('The restored project did not receive a native Reload action.')
-                return
+                if mode == 'import' and (not imported or (native_chooser and not chooser_used)):
+                    raise RuntimeError('Upload did not complete in a new workspace')
+                return imported
             now = time.monotonic()
             if (sys.platform == 'darwin' and write and not lines_seen and not bundle.exists()
                     and now - started >= 120):
@@ -120,6 +148,8 @@ def exercise(binary, work, identifier, write):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path, help='Separate native QA build executable')
+    parser.add_argument('--native-file-chooser', action='store_true',
+                        help='Drive the installed Linux desktop file chooser in the isolated X11 session')
     args = parser.parse_args()
     # Keep /snap/bin/<app> and Windows execution aliases intact. Launching the
     # resolved symlink would invoke snap itself without the application's name.
@@ -133,7 +163,7 @@ def main():
         identifier = str(uuid.uuid4())
         (active / 'profile').mkdir()
         try:
-            exercise(binary, active, identifier, write=True)
+            exercise(binary, active, identifier, 'write')
         except InitialNavigationTimeout as error:
             # An Intel macOS runner kept a live host with no responsive document.
             # Start Chromium once more with a new test profile and marker. Once
@@ -143,9 +173,10 @@ def main():
             active = work / 'second-launch'
             (active / 'profile').mkdir(parents=True)
             identifier = str(uuid.uuid4())
-            exercise(binary, active, identifier, write=True)
-        exercise(binary, active, identifier, write=False)
-        print('Passed real JCB startup, external HTTPS, detached tool, site export, process restart and native reload.')
+            exercise(binary, active, identifier, 'write')
+        import_key = exercise(binary, active, identifier, 'import', native_chooser=args.native_file_chooser)
+        exercise(binary, active, identifier, 'restore', import_key=import_key)
+        print('Passed real JCB startup, external HTTPS, detached tool, complete site export and upload, restart and native reload.')
     finally:
         # WebView2 may release its profile files shortly after the host exits.
         for attempt in range(20):
