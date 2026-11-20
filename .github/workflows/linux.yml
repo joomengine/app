@@ -29,7 +29,7 @@ jobs:
           "$unpack"/JoomEngine-*/install.sh
           dbus-run-session -- xvfb-run -a scripts/check-linux-window.sh "$HOME/.local/bin/joomengine"
       - name: Exercise hosted JCB in Qt WebEngine
-        run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser build-qa/joomengine
+        run: dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser --check-storage-capacity build-qa/joomengine
       - uses: actions/upload-artifact@v4
         with:
           name: linux-archive
@@ -134,15 +134,17 @@ jobs:
             exit "$failed"
           '
           systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-            xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
+            xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine "$HOME/snap/joomengine/current/.local/share/JoomEngine/browser"
       - name: Exercise Playground in the confined native QA build
         run: |
-          # Upgrade the existing local install in place and prove shared user data survives.
-          marker="$HOME/snap/joomengine/common/ci-upgrade-marker"
-          test -d "$(dirname "$marker")"
-          echo "$GITHUB_RUN_ID" > "$marker"
+          # Hash a file actually written by the release's WebEngine profile. Use
+          # current on both sides so the second read resolves to the new revision.
+          profile="$HOME/snap/joomengine/current/.local/share/JoomEngine/browser"
+          file=$(find "$profile" -type f -size +0c -print -quit)
+          test -n "$file"
+          before=$(sha256sum "$file")
           (cd dist/qa-snap && bash ./joomengine-install-snap.sh)
-          test "$(cat "$marker")" = "$GITHUB_RUN_ID"
+          test "$(sha256sum "$file")" = "$before"
           runtime="/run/user/$(id -u)"
           export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus"
           tmp="$HOME/snap/joomengine/common"

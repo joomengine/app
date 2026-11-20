@@ -232,6 +232,34 @@
       byte => byte.toString(16).padStart(2, '0')).join('');
     if (!response.ok || digest !== config.asset.digest) throw Error('The imported site file differs from the ZIP.');
   }
+  async function verifyStorageCapacity() {
+    const size = 10 * 1024 ** 3;
+    const directory = await navigator.storage.getDirectory();
+    const name = 'joomengine-capacity-' + crypto.randomUUID();
+    const handle = await directory.getFileHandle(name, { create: true });
+    let stream;
+    try {
+      stream = await handle.createWritable();
+      await stream.write(Uint8Array.of(0x4a));
+      await stream.truncate(size);
+      await stream.write({ type: 'write', position: size - 1, data: Uint8Array.of(0x45) });
+      await stream.close();
+      stream = null;
+      const reopened = await directory.getFileHandle(name);
+      const file = await reopened.getFile();
+      const first = new Uint8Array(await file.slice(0, 1).arrayBuffer());
+      const last = new Uint8Array(await file.slice(-1).arrayBuffer());
+      if (file.size !== size || first[0] !== 0x4a || last[0] !== 0x45) {
+        throw Error('The 10 GiB origin-private file did not retain its length and endpoint bytes.');
+      }
+      const { usage } = await navigator.storage.estimate();
+      if (!(usage >= size)) throw Error('Origin storage did not account for the committed 10 GiB file.');
+    } finally {
+      try { if (stream) await stream.abort(); }
+      finally { await directory.removeEntry(name); }
+    }
+    signal('progress', 'Verified and removed a sparse 10 GiB origin-private file, including quota usage and both endpoint bytes.');
+  }
   function advanceFreshWelcome() {
     // Only the isolated, fresh deployment can use welcome actions. Never
     // restart a running/saved site, or retry a write or partially built site.
@@ -264,6 +292,7 @@
     signal('progress', 'Loading the hosted Playground.');
     if (write) {
       await until(controlledLabel, () => navigator.serviceWorker?.controller && Boolean(globalThis.crossOriginIsolated));
+      if (config.checkStorage) await verifyStorageCapacity();
       await fetchRepositoryCatalog();
     }
     await until(dashboardLabel, () => {

@@ -22,7 +22,7 @@ chmod +x "$work/run-release" "$work/run-qa"
 # Run both launches in a real user session so Qt WebEngine's Flatpak subprocess
 # portal can create its sandboxed Chromium renderers.
 systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-  xvfb-run -a scripts/check-linux-window.sh "$work/run-release"
+  xvfb-run -a scripts/check-linux-window.sh "$work/run-release" "$HOME/.var/app/org.joomengine.app/data/JoomEngine/browser"
 flatpak kill org.joomengine.app 2>/dev/null || true
 systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
   --setenv="TMPDIR=$qa_cache" xvfb-run -a bash -euc '

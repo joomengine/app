@@ -47,7 +47,7 @@ try {
     # Windows activates a registered MSIX through its execution alias. Spawning
     # the executable directly under Program Files/WindowsApps bypasses activation.
     $executable = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/joomengine.exe'
-    & (Join-Path $PSScriptRoot 'check-window.ps1') -Executable $executable
+    & (Join-Path $PSScriptRoot 'check-window.ps1') -Executable $executable -PackageFamilyName $installed.PackageFamilyName
 } finally {
     if ($installed) { Remove-AppxPackage -Package $installed.PackageFullName }
     if ($cert) {

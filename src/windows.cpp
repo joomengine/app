@@ -161,6 +161,7 @@ struct Window : std::enable_shared_from_this<Window> {
 
 #ifdef JOOMENGINE_NATIVE_QA
     bool savedReloadConfirmation = false;
+    ComPtr<ICoreWebView2DownloadOperation> exportDownload;
 
     void qaFailure(const std::string& detail) {
         qa::result = 1;
@@ -206,6 +207,19 @@ struct Window : std::enable_shared_from_this<Window> {
             });
         if (FAILED(web->CallDevToolsProtocolMethod(L"Runtime.evaluate", lookup, select.Get())))
             qaFailure("Could not dispatch the WebView2 upload field lookup.");
+    }
+
+    void downloadStateChanged(ICoreWebView2DownloadOperation* operation) {
+        COREWEBVIEW2_DOWNLOAD_STATE state{};
+        if (FAILED(operation->get_State(&state))) {
+            qaFailure("Could not read the WebView2 download state.");
+        } else if (state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED) {
+            qa::logEvent("download-complete", "WebView2 finished the exported archive.");
+        } else if (state == COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED) {
+            COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON reason{};
+            operation->get_InterruptReason(&reason);
+            qaFailure("WebView2 interrupted the export with reason " + std::to_string(reason));
+        }
     }
 
     HRESULT configureQaDialogs() {
@@ -429,16 +443,31 @@ struct Window : std::enable_shared_from_this<Window> {
 #ifdef JOOMENGINE_NATIVE_QA
         // Production leaves the native download/Save As UI to the user.
         ComPtr<ICoreWebView2_4> downloads;
-        if (SUCCEEDED(web.As(&downloads)))
-            downloads->add_DownloadStarting(Callback<ICoreWebView2DownloadStartingEventHandler>(
-                [](ICoreWebView2*, ICoreWebView2DownloadStartingEventArgs* e) -> HRESULT {
-                    Text path;
-                    if (FAILED(e->get_ResultFilePath(&path.data))) return S_OK;
-                    const auto destination = qa::downloadPath(std::filesystem::path(path.data).filename().u8string());
-                    if (!destination.empty() && SUCCEEDED(e->put_ResultFilePath(wide(destination).c_str())))
-                        e->put_Handled(TRUE);
+        if (FAILED(web.As(&downloads)) ||
+            FAILED(downloads->add_DownloadStarting(Callback<ICoreWebView2DownloadStartingEventHandler>(
+                [weak](ICoreWebView2*, ICoreWebView2DownloadStartingEventArgs* e) -> HRESULT {
+                    auto self = weak.lock();
+                    if (!self || !self->hwnd) return S_OK;
+                    const wchar_t* file = _wgetenv(L"JOOMENGINE_QA_EXPORT");
+                    if (qa::environment("JOOMENGINE_QA_PHASE") != "write" || !file || !*file ||
+                        self->exportDownload || FAILED(e->get_DownloadOperation(&self->exportDownload)) ||
+                        FAILED(e->put_ResultFilePath(file)) || FAILED(e->put_Handled(TRUE))) {
+                        self->qaFailure("Could not capture the expected WebView2 export.");
+                        return S_OK;
+                    }
+                    EventRegistrationToken stateToken{};
+                    const HRESULT hr = self->exportDownload->add_StateChanged(
+                        Callback<ICoreWebView2StateChangedEventHandler>(
+                            [weak](ICoreWebView2DownloadOperation* operation, IUnknown*) -> HRESULT {
+                                if (auto window = weak.lock(); window && window->hwnd)
+                                    window->downloadStateChanged(operation);
+                                return S_OK;
+                            }).Get(), &stateToken);
+                    if (FAILED(hr)) self->qaFailure("Could not monitor the WebView2 export.");
+                    else self->downloadStateChanged(self->exportDownload.Get());
                     return S_OK;
-                }).Get(), &token);
+                }).Get(), &token)))
+            qaFailure("Could not monitor WebView2 downloads.");
 #endif
     }
 };

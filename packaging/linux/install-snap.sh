@@ -46,7 +46,7 @@ for provider in kde-qt6-core24 mesa-2404; do
     fi
 done
 # A local file is installed with the same command on first install and update.
-# snapd retains SNAP_USER_COMMON, including existing Playground workspaces.
+# snapd retains common data and carries the active revision's user data forward.
 revision=$(snap list joomengine 2>/dev/null | awk '$1 == "joomengine" {print $3}') || revision=
 if [[ "$revision" =~ ^x?[0-9]+$ ]] && "${admin[@]}" cmp --silent "$snap_file" "/var/lib/snapd/snaps/joomengine_$revision.snap"; then
     echo "This exact JoomEngine revision is already installed."
