@@ -51,7 +51,13 @@ def select_archive(bundle, process):
                 print('Found the native Upload dialog', ', '.join(facts), flush=True)
                 xdotool('windowfocus', '--sync', window)
                 xdotool('key', '--clearmodifiers', 'ctrl+l')
+                # GTK animates the location entry and resolves the typed path
+                # asynchronously. During the transition it can discard input.
+                if gtk_portal:
+                    time.sleep(0.3)
                 xdotool('type', '--clearmodifiers', '--', str(bundle))
+                if gtk_portal:
+                    time.sleep(0.4)
                 xdotool('key', '--clearmodifiers', 'Return')
                 print('Submitted the exported site ZIP through the native Upload dialog.', flush=True)
                 return
