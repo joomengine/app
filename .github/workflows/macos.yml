@@ -100,13 +100,22 @@ jobs:
           "$binary" &
           app_pid=$!
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
-          # Chromium starts its own processes only after the native webview starts.
+          profile="$HOME/Library/Application Support/JoomEngine/browser"
+          # Verify the installed app writes under Application Support before quitting.
+          ready=false
           for ((i=0; i<45; i++)); do
             kill -0 "$app_pid"
-            if pgrep -P "$app_pid" -f 'QtWebEngineProcess' >/dev/null; then break; fi
+            if pgrep -P "$app_pid" -f 'QtWebEngineProcess' >/dev/null &&
+               [[ -d "$profile" && -n "$(find "$profile" -type f -size +0c -print | sed -n '1p')" ]]; then
+              ready=true
+              break
+            fi
             sleep 1
           done
-          pgrep -P "$app_pid" -f 'QtWebEngineProcess' >/dev/null
+          if [[ "$ready" != true ]]; then
+            echo "Timed out waiting for the installed renderer and browser data under $profile." >&2
+            exit 1
+          fi
           kill "$app_pid"
           wait "$app_pid" || true
           trap - EXIT

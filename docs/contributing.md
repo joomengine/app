@@ -64,6 +64,8 @@ cmake --build build-qa --parallel
 dbus-run-session -- xvfb-run -a python3 test/native_smoke.py --native-file-chooser build-qa/joomengine
 ```
 
+The Ubuntu archive job also passes `--check-storage-capacity`. On a sparse-capable volume with at least 12 GiB free, this reopens a 10 GiB logical file, verifies its endpoint bytes and browser quota accounting, and removes it. The probe uses the temporary test profile.
+
 On macOS, run the executable inside the QA app bundle.
 
 ```sh

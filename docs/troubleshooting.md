@@ -1,5 +1,26 @@
 # JoomEngine troubleshooting
 
+## The Ubuntu Snap closes when I click Upload
+
+If the terminal ends with `GLib-GIO-ERROR`, `No GSettings schemas are installed on the system` and `Trace/breakpoint trap`, the Snap's file chooser could not load its settings. This failure can happen before you select a ZIP. Keep your profile and your exported ZIP, then update the existing installation to a build containing the fix (0.2.1 or newer). [Snap update instructions](install-snap.md)
+
+If Upload still fails, record the package version, whether you saw the file chooser, whether you selected a ZIP, its size and the first error after that action. For a failure after selection, also check free space on the drive holding your workspace and the storage estimate under **Backups**. The terminal excerpt and these details are sufficient for an initial report. [Gather a Linux report](#gather-a-linux-report)
+
+## Where the desktop app keeps your workspace
+
+The desktop browser profile contains Playground's saved sites and backups. For an ordinary update, quit JoomEngine and update the same package in place. Use **Download → Complete site** to take a copy you can restore independently of that profile.
+
+| Installation | Usual profile location for the signed-in user |
+| --- | --- |
+| Windows portable ZIP | `%LOCALAPPDATA%\JoomEngine\WebView2`, including when the executable is run from a different folder |
+| Windows MSIX | Windows resolves the same local app data path in the installed package's context. New files can be redirected into the package's private data under `%LOCALAPPDATA%\Packages`. |
+| macOS DMG | `~/Library/Application Support/JoomEngine/browser` |
+| Linux distribution packages, archive and AppImage | `$XDG_DATA_HOME/JoomEngine/browser`, usually `~/.local/share/JoomEngine/browser` |
+| Flatpak | `~/.var/app/org.joomengine.app/data/JoomEngine/browser` |
+| Snap | Under `~/snap/joomengine/`. The KDE runtime can use `current/.local/share/JoomEngine/browser` for the active revision. Snap carries revision data forward on refresh. |
+
+An exported ZIP lives in the folder you used for the download. Leave the profile intact if you need to recover a workspace. [Qt data locations](https://doc.qt.io/qt-6/qstandardpaths.html) · [Windows package data](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes) · [Snap data locations](https://snapcraft.io/docs/reference/administration/data-locations/) · [Flatpak data locations](https://docs.flatpak.org/en/latest/sandbox-permissions.html#filesystem-access)
+
 ## A blank strip or a flickering page
 
 First note whether the space is inside the Joomla page, at the bottom of the desktop window, or at the top where **File**, **Edit** and **View** appear. On Linux and Windows, **Ctrl+Shift+M** toggles that window's menu bar. In the Qt host the bottom status bar appears when the page fails to load or the browser process stops. If it shows a message, include its text in the report.

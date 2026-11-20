@@ -44,5 +44,5 @@ export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 systemctl --user start dbus.socket
 systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
-    xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine
+    xvfb-run -a scripts/check-linux-window.sh /snap/bin/joomengine "$HOME/snap/joomengine/current/.local/share/JoomEngine/browser"
 echo "revision=$revision" >> "${GITHUB_OUTPUT:?}"

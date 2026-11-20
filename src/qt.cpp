@@ -25,6 +25,7 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QTemporaryFile>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFileSystemAccessRequest>
 #include <QWebEngineLoadingInfo>
@@ -44,6 +45,14 @@ namespace {
 void openExternal(const QUrl& url) {
     if (joomengine::isExternalWebURL(url.toEncoded().toStdString()))
         QDesktopServices::openUrl(url);
+}
+
+// A pre-existing directory may be readable even when a disk quota or its
+// permissions prevent the browser from saving. Test the actual destination.
+bool canWriteBrowserDirectory(const QString& path) {
+    if (path.isEmpty() || !QDir().mkpath(path)) return false;
+    QTemporaryFile probe(QDir(path).filePath(QStringLiteral(".write-check-XXXXXX")));
+    return probe.open() && probe.write("1", 1) == 1 && probe.flush();
 }
 
 #ifdef JOOMENGINE_NATIVE_QA
@@ -367,6 +376,13 @@ int main(int argc, char** argv) {
             QObject::tr("The browser profile is in use or could not be locked. Please reopen the running JoomEngine window."));
         return 1;
     }
+    const QString storageDirectory = QDir(data).filePath(QStringLiteral("browser"));
+    if (!canWriteBrowserDirectory(storageDirectory)) {
+        QMessageBox::critical(nullptr, QObject::tr("JoomEngine"),
+            QObject::tr("JoomEngine cannot save your workspace in %1. Check free disk space and folder permissions, then reopen the app.")
+                .arg(QDir::toNativeSeparators(storageDirectory)));
+        return 1;
+    }
     // Only the holder of the profile lock may remove a stale activation socket.
     QLocalServer::removeServer(serverName);
     QLocalServer server;
@@ -383,9 +399,15 @@ int main(int argc, char** argv) {
 #else
     QWebEngineProfile profile(QStringLiteral("Playground"));
 #endif
-    profile.setPersistentStoragePath(QDir(data).filePath(QStringLiteral("browser")));
-    profile.setCachePath(QDir(cache).filePath(QStringLiteral("browser")));
-    profile.setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    profile.setPersistentStoragePath(storageDirectory);
+    const QString cacheDirectory = cache.isEmpty() ? QString{} : QDir(cache).filePath(QStringLiteral("browser"));
+    if (canWriteBrowserDirectory(cacheDirectory)) {
+        profile.setCachePath(cacheDirectory);
+        profile.setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    } else {
+        qWarning("The HTTP cache is using memory because the user cache directory is unavailable.");
+        profile.setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
+    }
     profile.settings()->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
     // Playground's Copy share URL calls writeText() from a user click.
     // JavascriptCanPaste stays off so scripted clipboard reads require permission.
