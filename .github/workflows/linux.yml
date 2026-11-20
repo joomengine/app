@@ -68,6 +68,14 @@ jobs:
           sudo snap pack dist/snap-project/prime dist/qa-snap
           packaging/linux/build-snap-installer.sh "dist/packages/$output" dist/packages/joomengine-install-snap.sh
           packaging/linux/build-snap-installer.sh "dist/qa-snap/$output" dist/qa-snap/joomengine-install-snap.sh
+      - name: Read file chooser settings from the packaged Snap with host schemas hidden
+        run: |
+          schemas=$(mktemp -d)
+          unsquashfs -cat dist/packages/*.snap usr/share/glib-2.0/schemas/gschemas.compiled > "$schemas/gschemas.compiled"
+          export XDG_DATA_DIRS="$schemas" XDG_DATA_HOME="$schemas" GSETTINGS_SCHEMA_DIR="$schemas" GSETTINGS_BACKEND=memory
+          gsettings get org.gtk.Settings.FileChooser show-hidden
+          gsettings get org.gnome.desktop.interface color-scheme
+          gsettings get org.gnome.system.proxy mode
       - uses: actions/upload-artifact@v4
         with:
           name: snap-install-test-inputs
