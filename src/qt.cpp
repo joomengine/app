@@ -59,16 +59,34 @@ bool canWriteBrowserDirectory(const QString& path) {
 class WorkspacePage final : public QWebEnginePage {
 public:
     using QWebEnginePage::QWebEnginePage;
-    bool awaitingArchive = false;
+    enum class ArchivePicker { Idle, Desktop, Automatic };
+    ArchivePicker pendingPicker = ArchivePicker::Idle;
 
 protected:
     QStringList chooseFiles(FileSelectionMode mode, const QStringList& previous, const QStringList& mimeTypes) override {
-        if (!std::exchange(awaitingArchive, false))
+        const auto picker = std::exchange(pendingPicker, ArchivePicker::Idle);
+        if (picker == ArchivePicker::Idle)
             return QWebEnginePage::chooseFiles(mode, previous, mimeTypes);
-        const QString file = QString::fromUtf8(qgetenv("JOOMENGINE_QA_EXPORT"));
         if (mode != FileSelectOpen || url().scheme() != QStringLiteral("https") ||
-            !joomengine::isWorkspaceURL(url().toEncoded().toStdString()) || !QFileInfo(file).isFile()) {
-            qa::logEvent("fail", "Unexpected Qt file chooser or missing exported archive.");
+            !joomengine::isWorkspaceURL(url().toEncoded().toStdString())) {
+            qa::logEvent("fail", "Unexpected Qt file chooser or origin.");
+            QApplication::exit(1);
+            return {};
+        }
+        if (picker == ArchivePicker::Desktop) {
+            qInfo("Native QA received the browser file request. Opening the desktop chooser.");
+            const auto files = QWebEnginePage::chooseFiles(mode, previous, mimeTypes);
+            qInfo() << "Native QA desktop chooser returned" << files.size() << "file(s).";
+            if (files.size() != 1 || !QFileInfo(files.front()).isReadable()) {
+                qa::logEvent("fail", "The desktop chooser did not return one readable file.");
+                QApplication::exit(1);
+                return {};
+            }
+            return files;
+        }
+        const QString file = QString::fromUtf8(qgetenv("JOOMENGINE_QA_EXPORT"));
+        if (!QFileInfo(file).isFile()) {
+            qa::logEvent("fail", "The exported archive is missing.");
             QApplication::exit(1);
             return {};
         }
@@ -230,10 +248,11 @@ public:
             });
             connect(page, &QWebEnginePage::titleChanged, this, [this, reload](const QString& title) {
                 qa::onTitle(title.toStdString(), [reload](bool) { reload->trigger(); }, [this] { close(); },
-                    [this] { page->action(QWebEnginePage::SelectAll)->trigger(); }, [this] {
+                    [this] { page->action(QWebEnginePage::SelectAll)->trigger(); }, [this](bool useDesktopDialog) {
                         // Chromium requires a user gesture to open a file input.
                         // Send Enter to the focused Upload button via Qt's browser widget.
-                        page->awaitingArchive = true;
+                        page->pendingPicker = useDesktopDialog ? WorkspacePage::ArchivePicker::Desktop
+                                                               : WorkspacePage::ArchivePicker::Automatic;
                         auto* target = browser->focusProxy();
                         if (!target) target = browser;
                         target->setFocus();
@@ -242,7 +261,7 @@ public:
                         QApplication::sendEvent(target, &press);
                         QApplication::sendEvent(target, &release);
                         QTimer::singleShot(15000, this, [this] {
-                            if (page->awaitingArchive) {
+                            if (page->pendingPicker != WorkspacePage::ArchivePicker::Idle) {
                                 qa::logEvent("fail", "Qt did not receive the browser file chooser request.");
                                 QApplication::exit(1);
                             }

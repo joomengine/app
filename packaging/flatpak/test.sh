@@ -40,5 +40,9 @@ systemd-run --user --wait --pipe --collect --quiet --working-directory="$PWD" \
     done
     scripts/check-linux-window.sh "$1/run-release" "$HOME/.var/app/org.joomengine.app/data/JoomEngine/browser"
     flatpak kill org.joomengine.app 2>/dev/null || true
-    exec python3 test/native_smoke.py --native-file-chooser "$1/run-qa"
+    if python3 test/native_smoke.py --native-file-chooser "$1/run-qa"; then
+      exit 0
+    fi
+    journalctl --user --no-pager -b -u xdg-desktop-portal -u xdg-desktop-portal-gtk -n 80
+    exit 1
   ' _ "$work"
