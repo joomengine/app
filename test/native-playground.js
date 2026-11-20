@@ -161,32 +161,40 @@
     } finally { window.open = nativeOpen; }
     signal('progress', 'Detached and redocked the real Adminer window.');
   }
-  async function query(write) {
+  async function writeMarker() {
     const db = dbFrame().contentDocument;
     const link = [...db.querySelectorAll('a')].find(anchor => anchor.textContent.trim() === 'SQL command');
     if (!link) throw Error('Missing Adminer SQL command link');
     link.click();
-    const form = () => dbFrame()?.contentDocument?.querySelector('textarea[name="query"]')?.form;
+    const form = () => {
+      const next = dbFrame()?.contentDocument;
+      return next !== db && next?.readyState === 'complete' && next.querySelector('textarea[name="query"]')?.form;
+    };
     await until('Adminer SQL form', form);
     const editor = form();
-    if (write) {
-      // Exercise the real native Edit command while focus is in Adminer's frame.
-      const input = editor.ownerDocument.createElement('input');
-      input.value = 'JoomEngine native edit command';
-      editor.append(input);
-      try {
-        input.focus();
-        input.setSelectionRange(0, 0);
-        signal('select-all', 'Activate native Edit > Select All in a focused tool field.');
-        await until('the native selection in Adminer', () =>
-          input.selectionStart === 0 && input.selectionEnd === input.value.length, 15000);
-      } finally { input.remove(); }
-    }
+    // Exercise the real native Edit command while focus is in Adminer's frame.
+    const input = editor.ownerDocument.createElement('input');
+    input.value = 'JoomEngine native edit command';
+    editor.append(input);
+    try {
+      input.focus();
+      input.setSelectionRange(0, 0);
+      signal('select-all', 'Activate native Edit > Select All in a focused tool field.');
+      await until('the native selection in Adminer', () =>
+        input.selectionStart === 0 && input.selectionEnd === input.value.length, 15000);
+    } finally { input.remove(); }
     const frame = dbFrame().contentWindow;
     const body = new URLSearchParams(new frame.FormData(editor));
-    const read = 'SELECT value FROM desktop_smoke;';
-    body.set('query', (write ? "CREATE TABLE desktop_smoke (value VARCHAR(80)); INSERT INTO desktop_smoke VALUES ('" + config.id + "'); " : '') + read);
-    const response = await frame.fetch(editor.action, { method: 'POST', body });
+    body.set('query', "CREATE TABLE desktop_smoke (value VARCHAR(80)); INSERT INTO desktop_smoke VALUES ('" +
+      config.id + "'); SELECT value FROM desktop_smoke;");
+    return frame.fetch(editor.action, { method: 'POST', body });
+  }
+  async function verifyMarker(write) {
+    // Adminer's Browse view reads the stored row after import or restart. Only
+    // creating the fixture needs a SQL command form and its session token.
+    const frame = dbFrame().contentWindow;
+    const response = write ? await writeMarker() :
+      await frame.fetch(new URL('?select=desktop_smoke', frame.location.href), { cache: 'no-store' });
     const answer = new DOMParser().parseFromString(await response.text(), 'text/html');
     if (!response.ok || ![...answer.querySelectorAll('#content td')].some(cell => cell.textContent.trim() === config.id)) {
       const diagnostic = [...answer.querySelectorAll('#content .error, #content .message')].slice(0, 3)
@@ -313,7 +321,7 @@
     }
     await openDatabase();
     if (write) await detach();
-    await query(write);
+    await verifyMarker(write);
     signal('progress', write ? 'Saved the marker row in MariaDB.' : 'Recovered the marker row in MariaDB.');
     await until('the Playground checkpoint', () => /^saved locally/i.test(element('save-state')?.textContent || ''), 240000);
     if (write) {
