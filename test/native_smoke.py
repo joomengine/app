@@ -70,6 +70,7 @@ def exercise(binary, work, identifier, write):
     env = os.environ.copy()
     env.update({
         'JOOMENGINE_QA_ID': identifier,
+        'JOOMENGINE_QA_PHASE': mode,
         'JOOMENGINE_QA_SCRIPT': str(script),
         'JOOMENGINE_QA_PROFILE': str(work / 'profile'),
         'JOOMENGINE_QA_EXPORT': str(bundle),

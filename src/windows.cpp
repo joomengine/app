@@ -158,6 +158,43 @@ struct Window : std::enable_shared_from_this<Window> {
     }
 
 #ifdef JOOMENGINE_NATIVE_QA
+    bool savedReloadConfirmation = false;
+
+    void qaFailure(const std::string& detail) {
+        qa::result = 1;
+        qa::logEvent("fail", detail);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+
+    HRESULT configureQaDialogs() {
+        ComPtr<ICoreWebView2Settings> settings;
+        HRESULT hr = web->get_Settings(&settings);
+        if (FAILED(hr)) return hr;
+        std::weak_ptr<Window> weak = shared_from_this();
+        EventRegistrationToken token{};
+        hr = web->add_ScriptDialogOpening(Callback<ICoreWebView2ScriptDialogOpeningEventHandler>(
+            [weak](ICoreWebView2*, ICoreWebView2ScriptDialogOpeningEventArgs* e) -> HRESULT {
+                auto self = weak.lock();
+                if (!self || !self->hwnd) return S_OK;
+                COREWEBVIEW2_SCRIPT_DIALOG_KIND kind{};
+                Text uri;
+                if (FAILED(e->get_Kind(&kind)) || FAILED(e->get_Uri(&uri.data)) ||
+                    !qa::takeSavedReloadConfirmation(self->savedReloadConfirmation,
+                        kind == COREWEBVIEW2_SCRIPT_DIALOG_KIND_BEFOREUNLOAD, uri.utf8())) {
+                    self->qaFailure("Unexpected WebView2 script dialog (kind " + std::to_string(kind) + ").");
+                } else if (FAILED(e->Accept())) {
+                    self->qaFailure("WebView2 rejected the saved workspace Reload confirmation.");
+                } else {
+                    qa::logEvent("native", "Confirmed the saved workspace's beforeunload dialog.");
+                }
+                return S_OK;
+            }).Get(), &token);
+        if (FAILED(hr)) return hr;
+        // Only the instrumented owner uses this handler. Production keeps the
+        // standard WebView2 dialogs, so the person using it can cancel a Reload.
+        return settings->put_AreDefaultScriptDialogsEnabled(FALSE);
+    }
+
     bool verifyCompactLayout() {
         const auto fillsClient = [this] {
             RECT native{}, browser{};
@@ -173,8 +210,13 @@ struct Window : std::enable_shared_from_this<Window> {
 
     void reload() {
         if (!web) return;
-        if (failedNavigation && owner) web->Navigate(wide(joomengine::url).c_str());
-        else web->Reload();
+        HRESULT hr = failedNavigation && owner ? web->Navigate(wide(joomengine::url).c_str()) : web->Reload();
+#ifdef JOOMENGINE_NATIVE_QA
+        if (FAILED(hr)) qaFailure("WebView2 could not dispatch native Reload, HRESULT " + std::to_string(hr));
+        else qa::logEvent("native", "Dispatched native Reload.");
+#else
+        if (FAILED(hr)) MessageBoxW(hwnd, L"Windows could not reload the page. Please try again.", L"JoomEngine", MB_OK | MB_ICONERROR);
+#endif
     }
 
     void failure(const wchar_t* detail) {
@@ -218,6 +260,10 @@ struct Window : std::enable_shared_from_this<Window> {
 
     void loadOwner() {
 #ifdef JOOMENGINE_NATIVE_QA
+        if (FAILED(configureQaDialogs())) {
+            qaFailure("Could not register the WebView2 test dialog handler.");
+            return;
+        }
         auto self = shared_from_this();
         auto ready = Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
             [self](HRESULT result, LPCWSTR) -> HRESULT {
@@ -259,8 +305,17 @@ struct Window : std::enable_shared_from_this<Window> {
                 e->get_IsSuccess(&success);
                 COREWEBVIEW2_WEB_ERROR_STATUS error = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                 e->get_WebErrorStatus(&error);
-                if (auto self = weak.lock(); self && error != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)
-                    self->failedNavigation = !success;
+                if (auto self = weak.lock()) {
+                    if (error != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)
+                        self->failedNavigation = !success;
+#ifdef JOOMENGINE_NATIVE_QA
+                    if (self->owner) {
+                        self->savedReloadConfirmation = false;
+                        qa::logEvent("navigation", success ? "Completed top-level navigation." :
+                            "Top-level navigation failed, WebView2 status " + std::to_string(error));
+                    }
+#endif
+                }
                 return S_OK;
             }).Get(), &token);
         web->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>(
@@ -318,7 +373,11 @@ struct Window : std::enable_shared_from_this<Window> {
 #ifdef JOOMENGINE_NATIVE_QA
                 if (self->owner)
                     qa::onTitle(title.utf8(),
-                        [self] { PostMessageW(self->hwnd, WM_COMMAND, reloadCommand, 0); },
+                        [self](bool savedReload) {
+                            self->savedReloadConfirmation = savedReload && qa::environment("JOOMENGINE_QA_PHASE") == "restore";
+                            if (!PostMessageW(self->hwnd, WM_COMMAND, reloadCommand, 0))
+                                self->qaFailure("Could not post the native Reload command.");
+                        },
                         [self] { PostMessageW(self->hwnd, WM_CLOSE, 0, 0); },
                         [self] { PostMessageW(self->hwnd, WM_COMMAND, selectAllCommand, 0); });
 #endif

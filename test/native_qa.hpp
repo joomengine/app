@@ -3,12 +3,15 @@
 #error Native test hooks belong only in the separate QA build.
 #endif
 
+#include "desktop.hpp"
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace qa {
 inline std::string environment(const char* name) {
@@ -32,6 +35,18 @@ inline std::string downloadPath(std::string_view suggested) {
 inline int result = 1;
 inline int exitCode() { return result; }
 
+inline void logEvent(std::string_view command, std::string_view detail) {
+    std::ofstream log(std::filesystem::u8path(environment("JOOMENGINE_QA_LOG")), std::ios::app);
+    log << command << ' ' << detail << '\n';
+}
+
+// A saved-workspace Reload can prompt once if persistence resumed after the
+// checkpoint. Ordinary alerts, module retries and other origins require attention.
+inline bool takeSavedReloadConfirmation(bool& pending, bool beforeUnload, std::string_view uri) {
+    return std::exchange(pending, false) && beforeUnload && uri.substr(0, 8) == "https://" &&
+           joomengine::isWorkspaceURL(uri);
+}
+
 // Called only for the owner window in the QA build. File output also works
 // for native GUI binaries without an attached console on Windows or macOS.
 template<class Reload, class Quit, class SelectAll>
@@ -46,12 +61,10 @@ void onTitle(std::string_view title, Reload reload, Quit quit, SelectAll selectA
     if (command == "pass" &&
         !std::filesystem::exists(std::filesystem::u8path(environment("JOOMENGINE_QA_GATE")))) return;
 
-    std::ofstream log(std::filesystem::u8path(environment("JOOMENGINE_QA_LOG")), std::ios::app);
-    log << command << ' ' << detail << '\n';
-    log.close();
+    logEvent(command, detail);
 
     if (command == "select-all") selectAll();
-    if (command == "reload" || command == "retry-module") reload();
+    if (command == "reload" || command == "retry-module") reload(command == "reload");
     if (command == "fail" || command == "pass") {
         result = command == "pass" ? 0 : 1;
         quit();
